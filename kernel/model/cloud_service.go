@@ -554,6 +554,7 @@ func getUser(token string) (*conf.User, error) {
 		logging.LogErrorf("get community user failed: %s", err)
 		return nil, errors.New(Conf.Language(18))
 	}
+	user.SetUserIsSuper()
 	return user, nil
 }
 

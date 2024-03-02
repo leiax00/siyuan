@@ -51,3 +51,10 @@ type UserTitle struct {
 func (user *User) GetCloudRepoAvailableSize() int64 {
 	return int64(user.UserSiYuanRepoSize - user.UserSiYuanAssetSize)
 }
+
+func (user *User) SetUserIsSuper() {
+	user.UserSiYuanSubscriptionPlan = 0
+	user.UserSiYuanSubscriptionStatus = 0
+	user.UserSiYuanSubscriptionType = 0
+	user.UserSiYuanOneTimePayStatus = 1
+}
