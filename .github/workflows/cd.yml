@@ -53,16 +53,12 @@ jobs:
         with:
           cmd: 'jq .version app/package.json -r'
 
-      - name: Extract Tag from Ref
-        id: extract_tag
-        run: echo "::set-output name=tag::$(echo ${{ github.ref }} | sed 's@refs/tags/@@')"
-
       - name: Create Release
         id: create_release
         uses: ncipollo/release-action@v1
         with:
           name: ${{ steps.release_info.outputs.release_version }}
-          tag: ${{ steps.extract_tag.outputs.tag }}
+          tag: ${{ github.ref }}
           body: ${{ env.release_body }}
           draft: false
           prerelease: true
