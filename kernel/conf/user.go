@@ -16,6 +16,8 @@
 
 package conf
 
+import "time"
+
 type User struct {
 	UserId                          string       `json:"userId"`
 	UserName                        string       `json:"userName"`
@@ -50,4 +52,12 @@ type UserTitle struct {
 
 func (user *User) GetCloudRepoAvailableSize() int64 {
 	return int64(user.UserSiYuanRepoSize - user.UserSiYuanAssetSize)
+}
+
+func (user *User) ToSubscriptionUser() {
+	user.UserSiYuanProExpireTime = float64(time.Now().UnixMilli() + (365 * 24 * 3600 * 1000 / 2))
+	user.UserSiYuanSubscriptionPlan = 0
+	user.UserSiYuanSubscriptionStatus = 0
+	user.UserSiYuanSubscriptionType = 0
+	user.UserSiYuanOneTimePayStatus = 1
 }
