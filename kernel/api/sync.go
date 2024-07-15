@@ -18,12 +18,13 @@ package api
 
 import (
 	"encoding/hex"
-	"github.com/siyuan-note/logging"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/siyuan-note/logging"
 
 	"github.com/88250/gulu"
 	"github.com/gin-gonic/gin"
@@ -225,15 +226,15 @@ func importSyncProviderS3(c *gin.Context) {
 		return
 	}
 
-	tmpDir := filepath.Join(util.TempDir, "import")
-	if err = os.MkdirAll(tmpDir, 0755); nil != err {
+	importDir := filepath.Join(util.TempDir, "import")
+	if err = os.MkdirAll(importDir, 0755); nil != err {
 		logging.LogErrorf("import S3 provider failed: %s", err)
 		ret.Code = -1
 		ret.Msg = err.Error()
 		return
 	}
 
-	tmp := filepath.Join(tmpDir, f.Filename)
+	tmp := filepath.Join(importDir, f.Filename)
 	if err = os.WriteFile(tmp, data, 0644); nil != err {
 		logging.LogErrorf("import S3 provider failed: %s", err)
 		ret.Code = -1
@@ -241,6 +242,7 @@ func importSyncProviderS3(c *gin.Context) {
 		return
 	}
 
+	tmpDir := filepath.Join(importDir, "s3")
 	if err = gulu.Zip.Unzip(tmp, tmpDir); nil != err {
 		logging.LogErrorf("import S3 provider failed: %s", err)
 		ret.Code = -1
@@ -248,7 +250,22 @@ func importSyncProviderS3(c *gin.Context) {
 		return
 	}
 
-	tmp = filepath.Join(tmpDir, f.Filename[:len(f.Filename)-4])
+	entries, err := os.ReadDir(tmpDir)
+	if nil != err {
+		logging.LogErrorf("import S3 provider failed: %s", err)
+		ret.Code = -1
+		ret.Msg = err.Error()
+		return
+	}
+
+	if 1 != len(entries) {
+		logging.LogErrorf("invalid S3 provider package")
+		ret.Code = -1
+		ret.Msg = "invalid S3 provider package"
+		return
+	}
+
+	tmp = filepath.Join(tmpDir, entries[0].Name())
 	data, err = os.ReadFile(tmp)
 	if nil != err {
 		logging.LogErrorf("import S3 provider failed: %s", err)
@@ -364,6 +381,10 @@ func getSyncInfo(c *gin.Context) {
 func getBootSync(c *gin.Context) {
 	ret := gulu.Ret.NewResult()
 	defer c.JSON(http.StatusOK, ret)
+
+	if !model.IsAdminRoleContext(c) {
+		return
+	}
 
 	if model.Conf.Sync.Enabled && 1 == model.BootSyncSucc {
 		ret.Code = 1
