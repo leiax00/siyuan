@@ -35,8 +35,8 @@ func netAssets2LocalAssets(c *gin.Context) {
 	}
 
 	id := arg["id"].(string)
-	err := model.NetAssets2LocalAssets(id)
-	if nil != err {
+	err := model.NetAssets2LocalAssets(id, false, "")
+	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
 		ret.Data = map[string]interface{}{"closeTimeout": 5000}
@@ -58,8 +58,8 @@ func netImg2LocalAssets(c *gin.Context) {
 	if urlArg := arg["url"]; nil != urlArg {
 		url = urlArg.(string)
 	}
-	err := model.NetImg2LocalAssets(id, url)
-	if nil != err {
+	err := model.NetAssets2LocalAssets(id, true, url)
+	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
 		ret.Data = map[string]interface{}{"closeTimeout": 5000}
@@ -78,7 +78,7 @@ func autoSpace(c *gin.Context) {
 
 	id := arg["id"].(string)
 	err := model.AutoSpace(id)
-	if nil != err {
+	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
 		ret.Data = map[string]interface{}{"closeTimeout": 5000}

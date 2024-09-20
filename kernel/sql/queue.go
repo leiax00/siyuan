@@ -61,7 +61,7 @@ func FlushTxJob() {
 func WaitForWritingDatabase() {
 	var printLog bool
 	var lastPrintLog bool
-	for i := 0; isWritingDatabase(); i++ {
+	for i := 0; isWritingDatabase(util.SQLFlushInterval + 50*time.Millisecond); i++ {
 		time.Sleep(50 * time.Millisecond)
 		if 200 < i && !printLog { // 10s 后打日志
 			logging.LogWarnf("database is writing: \n%s", logging.ShortStack())
@@ -74,8 +74,14 @@ func WaitForWritingDatabase() {
 	}
 }
 
-func isWritingDatabase() bool {
-	time.Sleep(util.SQLFlushInterval + 50*time.Millisecond)
+func WaitForWritingDatabaseIn(duration time.Duration) {
+	for i := 0; isWritingDatabase(duration); i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func isWritingDatabase(d time.Duration) bool {
+	time.Sleep(d)
 	dbQueueLock.Lock()
 	defer dbQueueLock.Unlock()
 	if 0 < len(operationQueue) || isWriting {
@@ -130,20 +136,20 @@ func FlushQueue() {
 		}
 
 		tx, err := beginTx()
-		if nil != err {
+		if err != nil {
 			return
 		}
 
 		groupOpsCurrent[op.action]++
 		context["current"] = groupOpsCurrent[op.action]
 		context["total"] = groupOpsTotal[op.action]
-		if err = execOp(op, tx, context); nil != err {
+		if err = execOp(op, tx, context); err != nil {
 			tx.Rollback()
 			logging.LogErrorf("queue operation [%s] failed: %s", op.action, err)
 			continue
 		}
 
-		if err = commitTx(tx); nil != err {
+		if err = commitTx(tx); err != nil {
 			logging.LogErrorf("commit tx failed: %s", err)
 			continue
 		}
@@ -182,7 +188,7 @@ func execOp(op *dbQueueOperation, tx *sql.Tx, context map[string]interface{}) (e
 		err = batchDeleteByRootIDs(tx, op.removeTreeIDs, context)
 	case "rename":
 		err = batchUpdateHPath(tx, op.renameTree.ID, op.renameTree.HPath, context)
-		if nil != err {
+		if err != nil {
 			break
 		}
 		err = updateRootContent(tx, path.Base(op.renameTree.HPath), op.renameTree.Root.IALAttr("updated"), op.renameTree.ID)

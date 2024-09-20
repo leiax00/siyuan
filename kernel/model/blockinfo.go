@@ -55,7 +55,7 @@ func GetDocInfo(blockID string) (ret *BlockInfo) {
 	WaitForWritingFiles()
 
 	tree, err := LoadTreeByBlockID(blockID)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("load tree by root id [%s] failed: %s", blockID, err)
 		return
 	}
@@ -111,7 +111,7 @@ func GetDocInfo(blockID string) (ret *BlockInfo) {
 	var subFileCount int
 	boxLocalPath := filepath.Join(util.DataDir, tree.Box)
 	subFiles, err := os.ReadDir(filepath.Join(boxLocalPath, strings.TrimSuffix(tree.Path, ".sy")))
-	if nil == err {
+	if err == nil {
 		for _, subFile := range subFiles {
 			if strings.HasSuffix(subFile.Name(), ".sy") {
 				subFileCount++
@@ -130,8 +130,8 @@ func GetBlockRefText(id string) string {
 	}
 
 	tree, err := LoadTreeByBlockID(id)
-	if nil != err {
-		return ErrTreeNotFound.Error()
+	if err != nil {
+		return ""
 	}
 
 	node := treenode.GetNodeInTree(tree, id)

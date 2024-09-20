@@ -1,16 +1,23 @@
 import {
     hasClosestBlock,
-    hasClosestByAttribute,
     hasClosestByClassName,
     hasClosestByMatchTag,
     hasClosestByTag,
-    hasTopClosestByClassName
+    hasTopClosestByClassName, isInEmbedBlock
 } from "../util/hasClosest";
 import {getIconByType} from "../../editor/getIcon";
 import {enterBack, iframeMenu, setFold, tableMenu, videoMenu, zoomOut} from "../../menus/protyle";
 import {MenuItem} from "../../menus/Menu";
 import {copySubMenu, openAttr, openWechatNotify} from "../../menus/commonMenuItem";
-import {copyPlainText, isMac, isOnlyMeta, openByMobile, updateHotkeyTip, writeText} from "../util/compatibility";
+import {
+    copyPlainText,
+    isInAndroid,
+    isMac,
+    isOnlyMeta,
+    openByMobile,
+    updateHotkeyTip,
+    writeText
+} from "../util/compatibility";
 import {
     transaction,
     turnsIntoOneTransaction,
@@ -79,7 +86,7 @@ export class Gutter {
             let avElement: Element;
             if (buttonElement.dataset.rowId) {
                 avElement = Array.from(protyle.wysiwyg.element.querySelectorAll(`.av[data-node-id="${buttonElement.dataset.nodeId}"]`)).find((item: HTMLElement) => {
-                    if (!hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                    if (!isInEmbedBlock(item)) {
                         return true;
                     }
                 });
@@ -159,8 +166,7 @@ export class Gutter {
                 buttonElement.setAttribute("disabled", "disabled");
                 let foldElement: Element;
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${(buttonElement.previousElementSibling || buttonElement.nextElementSibling).getAttribute("data-node-id")}"]`)).find(item => {
-                    if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed") &&
-                        this.isMatchNode(item)) {
+                    if (!isInEmbedBlock(item) && this.isMatchNode(item)) {
                         foldElement = item;
                         return true;
                     }
@@ -229,7 +235,7 @@ export class Gutter {
             const gutterRect = buttonElement.getBoundingClientRect();
             if (buttonElement.dataset.type === "NodeAttributeViewRowMenu" || buttonElement.dataset.type === "NodeAttributeViewRow") {
                 const rowElement = Array.from(protyle.wysiwyg.element.querySelectorAll(`.av[data-node-id="${buttonElement.dataset.nodeId}"] .av__row[data-id="${buttonElement.dataset.rowId}"]`)).find((item: HTMLElement) => {
-                    if (!hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                    if (!isInEmbedBlock(item)) {
                         return true;
                     }
                 });
@@ -295,8 +301,7 @@ export class Gutter {
             } else if (event.altKey) {
                 let foldElement: Element;
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${id}"]`)).find(item => {
-                    if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed") &&
-                        this.isMatchNode(item)) {
+                    if (!isInEmbedBlock(item) && this.isMatchNode(item)) {
                         foldElement = item;
                         return true;
                     }
@@ -370,7 +375,7 @@ export class Gutter {
                 const gutterRect = buttonElement.getBoundingClientRect();
                 if (buttonElement.dataset.type === "NodeAttributeViewRowMenu") {
                     const rowElement = Array.from(protyle.wysiwyg.element.querySelectorAll(`.av[data-node-id="${buttonElement.dataset.nodeId}"] .av__row[data-id="${buttonElement.dataset.rowId}"]`)).find((item: HTMLElement) => {
-                        if (!hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             return true;
                         }
                     });
@@ -406,7 +411,7 @@ export class Gutter {
                 return;
             }
             Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${buttonElement.getAttribute("data-node-id")}"]`)).find(item => {
-                if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed") && this.isMatchNode(item)) {
+                if (!isInEmbedBlock(item) && this.isMatchNode(item)) {
                     const rowItem = item.querySelector(`.av__row[data-id="${buttonElement.dataset.rowId}"]`);
                     Array.from(protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--hl, av__row--hl")).forEach(hlItem => {
                         if (!item.isSameNode(hlItem)) {
@@ -437,7 +442,8 @@ export class Gutter {
 
     private isMatchNode(item: Element) {
         const itemRect = item.getBoundingClientRect();
-        let gutterTop = this.element.getBoundingClientRect().top + 4;
+        // 原本为4，由于 https://github.com/siyuan-note/siyuan/issues/12166 改为 6
+        let gutterTop = this.element.getBoundingClientRect().top + 6;
         if (itemRect.height < Math.floor(window.siyuan.config.editor.fontSize * 1.625) + 8) {
             gutterTop = gutterTop - (itemRect.height - this.element.clientHeight) / 2;
         }
@@ -566,6 +572,7 @@ export class Gutter {
                 turnIntoSubmenu.push(this.turnsIntoOne({
                     icon: "iconQuote",
                     label: window.siyuan.languages.quote,
+                    accelerator: window.siyuan.config.keymap.editor.insert.quote.custom,
                     protyle,
                     selectsElement,
                     type: "Blocks2Blockquote"
@@ -867,8 +874,7 @@ export class Gutter {
         let nodeElement: Element;
         if (buttonElement.tagName === "BUTTON") {
             Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${id}"]`)).find(item => {
-                if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed") &&
-                    this.isMatchNode(item)) {
+                if (!isInEmbedBlock(item) && this.isMatchNode(item)) {
                     nodeElement = item;
                     return true;
                 }
@@ -913,6 +919,7 @@ export class Gutter {
             }));
             turnIntoSubmenu.push(this.turnsIntoOne({
                 icon: "iconQuote",
+                accelerator: window.siyuan.config.keymap.editor.insert.quote.custom,
                 label: window.siyuan.languages.quote,
                 protyle,
                 selectsElement: [nodeElement],
@@ -1501,7 +1508,11 @@ export class Gutter {
                 label: `${window.siyuan.languages.copy} ${window.siyuan.languages.headings1}`,
                 click() {
                     fetchPost("/api/block/getHeadingChildrenDOM", {id}, (response) => {
-                        writeText(response.data + Constants.ZWSP);
+                        if (isInAndroid()) {
+                            window.JSAndroid.writeHTMLClipboard(protyle.lute.BlockDOM2StdMd(response.data).trimEnd(), response.data + Constants.ZWSP);
+                        } else {
+                            writeText(response.data + Constants.ZWSP);
+                        }
                     });
                 }
             }).element);
@@ -1510,7 +1521,11 @@ export class Gutter {
                 label: `${window.siyuan.languages.cut} ${window.siyuan.languages.headings1}`,
                 click() {
                     fetchPost("/api/block/getHeadingChildrenDOM", {id}, (response) => {
-                        writeText(response.data + Constants.ZWSP);
+                        if (isInAndroid()) {
+                            window.JSAndroid.writeHTMLClipboard(protyle.lute.BlockDOM2StdMd(response.data).trimEnd(), response.data + Constants.ZWSP);
+                        } else {
+                            writeText(response.data + Constants.ZWSP);
+                        }
                         fetchPost("/api/block/getHeadingDeleteTransaction", {
                             id,
                         }, (response) => {
@@ -1953,8 +1968,7 @@ export class Gutter {
         let hideParent = false;
         while (nodeElement) {
             const isShow = !hideParent || (hideParent && nodeElement.getAttribute("fold") === "1");
-            const embedElement = hasClosestByAttribute(nodeElement.parentElement, "data-type", "NodeBlockQueryEmbed");
-            if (!embedElement) {
+            if (!isInEmbedBlock(nodeElement)) {
                 let type;
                 if (isShow) {
                     type = nodeElement.getAttribute("data-type");
@@ -1979,7 +1993,7 @@ export class Gutter {
                     const topElement = getTopAloneElement(nodeElement);
                     listItem = topElement.querySelector(".li") || topElement.querySelector(".list");
                     // 嵌入块中有列表时块标显示位置错误 https://github.com/siyuan-note/siyuan/issues/6254
-                    if (hasClosestByAttribute(listItem, "data-type", "NodeBlockQueryEmbed")) {
+                    if (isInEmbedBlock(listItem)) {
                         listItem = undefined;
                     }
                     // 标题必须显示

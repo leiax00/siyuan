@@ -169,8 +169,21 @@ export const pasteAsPlainText = async (protyle: IProtyle) => {
     if (localFiles.length === 0) {
         // Inline-level elements support pasted as plain text https://github.com/siyuan-note/siyuan/issues/8010
         navigator.clipboard.readText().then(textPlain => {
+            // 对一些内置需要解析的 HTML 标签进行内部转移 Improve sub/sup pasting as plain text https://github.com/siyuan-note/siyuan/issues/12155
+            textPlain = textPlain.replace(/<sub>/g, "__@sub@__").replace(/<\/sub>/g, "__@/sub@__");
+            textPlain = textPlain.replace(/<sup>/g, "__@sup@__").replace(/<\/sup>/g, "__@/sup@__");
+            textPlain = textPlain.replace(/<kbd>/g, "__@kbd@__").replace(/<\/kbd>/g, "__@/kbd@__");
+            textPlain = textPlain.replace(/<u>/g, "__@u@__").replace(/<\/u>/g, "__@/u@__");
+
             // 对 HTML 标签进行内部转义，避免被 Lute 解析以后变为小写 https://github.com/siyuan-note/siyuan/issues/10620
             textPlain = textPlain.replace(/</g, ";;;lt;;;").replace(/>/g, ";;;gt;;;");
+
+            // 反转义内置需要解析的 HTML 标签
+            textPlain = textPlain.replace(/__@sub@__/g, "<sub>").replace(/__@\/sub@__/g, "</sub>");
+            textPlain = textPlain.replace(/__@sup@__/g, "<sup>").replace(/__@\/sup@__/g, "</sup>");
+            textPlain = textPlain.replace(/__@kbd@__/g, "<kbd>").replace(/__@\/kbd@__/g, "</kbd>");
+            textPlain = textPlain.replace(/__@u@__/g, "<u>").replace(/__@\/u@__/g, "</u");
+
             const content = protyle.lute.BlockDOM2EscapeMarkerContent(protyle.lute.Md2BlockDOM(textPlain));
             // insertHTML 会进行内部反转义
             insertHTML(content, protyle, false, false, true);
@@ -228,6 +241,10 @@ export const paste = async (protyle: IProtyle, event: (ClipboardEvent | DragEven
             files = event.dataTransfer.items;
         }
     }
+
+    // Improve the pasting of selected text in PDF rectangular annotation https://github.com/siyuan-note/siyuan/issues/11629
+    textPlain = textPlain.replace(/\r\n|\r|\u2028|\u2029/g, "\n");
+
     /// #if !BROWSER
     // 不再支持 PC 浏览器 https://github.com/siyuan-note/siyuan/issues/7206
     if (!siyuanHTML && !textHTML && !textPlain && ("clipboardData" in event)) {
@@ -326,13 +343,6 @@ export const paste = async (protyle: IProtyle, event: (ClipboardEvent | DragEven
     const range = getEditorRange(protyle.wysiwyg.element);
     if (nodeElement.getAttribute("data-type") === "NodeCodeBlock" ||
         protyle.toolbar.getCurrentType(range).includes("code")) {
-        // 粘贴在代码位置
-        // https://github.com/siyuan-note/siyuan/issues/9142
-        // https://github.com/siyuan-note/siyuan/issues/9323
-        // 需排除行内代码 https://github.com/siyuan-note/siyuan/issues/9369
-        if (nodeElement.querySelector(".protyle-action")?.contains(range.startContainer)) {
-            range.setStart(nodeElement.querySelector(".hljs").firstChild, 0);
-        }
         insertHTML(textPlain, protyle);
         return;
     } else if (siyuanHTML) {

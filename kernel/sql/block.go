@@ -24,7 +24,6 @@ import (
 	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
 	"github.com/88250/lute/html"
-	"github.com/88250/lute/lex"
 	"github.com/siyuan-note/siyuan/kernel/av"
 	"github.com/siyuan-note/siyuan/kernel/cache"
 	"github.com/siyuan-note/siyuan/kernel/filesys"
@@ -58,16 +57,16 @@ type Block struct {
 
 func updateRootContent(tx *sql.Tx, content, updated, id string) (err error) {
 	stmt := "UPDATE blocks SET content = ?, fcontent = ?, updated = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, content, content, updated, id); nil != err {
+	if err = execStmtTx(tx, stmt, content, content, updated, id); err != nil {
 		return
 	}
 	stmt = "UPDATE blocks_fts SET content = ?, fcontent = ?, updated = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, content, content, updated, id); nil != err {
+	if err = execStmtTx(tx, stmt, content, content, updated, id); err != nil {
 		return
 	}
 	if !caseSensitive {
 		stmt = "UPDATE blocks_fts_case_insensitive SET content = ?, fcontent = ?, updated = ? WHERE id = ?"
-		if err = execStmtTx(tx, stmt, content, content, updated, id); nil != err {
+		if err = execStmtTx(tx, stmt, content, content, updated, id); err != nil {
 			return
 		}
 	}
@@ -78,18 +77,18 @@ func updateRootContent(tx *sql.Tx, content, updated, id string) (err error) {
 
 func updateBlockContent(tx *sql.Tx, block *Block) (err error) {
 	stmt := "UPDATE blocks SET content = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, block.Content, block.ID); nil != err {
+	if err = execStmtTx(tx, stmt, block.Content, block.ID); err != nil {
 		tx.Rollback()
 		return
 	}
 	stmt = "UPDATE blocks_fts SET content = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, block.Content, block.ID); nil != err {
+	if err = execStmtTx(tx, stmt, block.Content, block.ID); err != nil {
 		tx.Rollback()
 		return
 	}
 	if !caseSensitive {
 		stmt = "UPDATE blocks_fts_case_insensitive SET content = ? WHERE id = ?"
-		if err = execStmtTx(tx, stmt, block.Content, block.ID); nil != err {
+		if err = execStmtTx(tx, stmt, block.Content, block.ID); err != nil {
 			tx.Rollback()
 			return
 		}
@@ -118,18 +117,18 @@ func indexNode(tx *sql.Tx, id string) (err error) {
 
 	content := NodeStaticContent(node, nil, true, indexAssetPath, true, nil)
 	stmt := "UPDATE blocks SET content = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, content, id); nil != err {
+	if err = execStmtTx(tx, stmt, content, id); err != nil {
 		tx.Rollback()
 		return
 	}
 	stmt = "UPDATE blocks_fts SET content = ? WHERE id = ?"
-	if err = execStmtTx(tx, stmt, content, id); nil != err {
+	if err = execStmtTx(tx, stmt, content, id); err != nil {
 		tx.Rollback()
 		return
 	}
 	if !caseSensitive {
 		stmt = "UPDATE blocks_fts_case_insensitive SET content = ? WHERE id = ?"
-		if err = execStmtTx(tx, stmt, content, id); nil != err {
+		if err = execStmtTx(tx, stmt, content, id); err != nil {
 			tx.Rollback()
 			return
 		}
@@ -261,8 +260,6 @@ func nodeStaticContent(node *ast.Node, excludeTypes []string, includeTextMarkATi
 					buf.WriteString(" " + html.UnescapeHTMLStr(n.TextMarkAHref))
 				}
 			}
-		case ast.NodeBackslash:
-			buf.WriteByte(lex.ItemBackslash)
 		case ast.NodeBackslashContent:
 			buf.Write(n.Tokens)
 		case ast.NodeAudio, ast.NodeVideo:

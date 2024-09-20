@@ -5,7 +5,7 @@ import {Constants} from "../../constants";
 import {blockRender} from "../render/blockRender";
 import {processRender} from "../util/processCode";
 import {highlightRender} from "../render/highlightRender";
-import {hasClosestBlock, hasClosestByAttribute} from "../util/hasClosest";
+import {hasClosestByAttribute, isInEmbedBlock} from "../util/hasClosest";
 import {setFold, zoomOut} from "../../menus/protyle";
 import {disabledProtyle, enableProtyle, onGet} from "../util/onGet";
 /// #if !MOBILE
@@ -94,8 +94,7 @@ const promiseTransaction = () => {
                 if (protyle.options.backlinkData) {
                     // 反链中有多个相同块的情况
                     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-                        if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" ||
-                            !hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             if (range && (item.isSameNode(range.startContainer) || item.contains(range.startContainer))) {
                                 // 正在编辑的块不能进行更新
                             } else {
@@ -110,14 +109,12 @@ const promiseTransaction = () => {
                 }
                 // 当前编辑器中更新嵌入块
                 updateEmbed(protyle, operation);
-                // 更新块引用
-                updateRef(protyle, operation.id);
                 return;
             }
             if (operation.action === "delete" || operation.action === "append") {
                 if (protyle.options.backlinkData) {
                     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-                        if (!hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             item.remove();
                         }
                     });
@@ -136,7 +133,7 @@ const promiseTransaction = () => {
                 if (protyle.options.backlinkData) {
                     const updateElements: Element[] = [];
                     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-                        if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" || !hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             updateElements.push(item);
                             return;
                         }
@@ -144,14 +141,14 @@ const promiseTransaction = () => {
                     let hasFind = false;
                     if (operation.previousID && updateElements.length > 0) {
                         Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.previousID}"]`)).forEach(item => {
-                            if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" || !hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                            if (!isInEmbedBlock(item)) {
                                 item.after(processClonePHElement(updateElements[0].cloneNode(true) as Element));
                                 hasFind = true;
                             }
                         });
                     } else if (updateElements.length > 0) {
                         Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.parentID}"]`)).forEach(item => {
-                            if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" || !hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                            if (!isInEmbedBlock(item)) {
                                 // 列表特殊处理
                                 if (item.firstElementChild?.classList.contains("protyle-action")) {
                                     item.firstElementChild.after(processClonePHElement(updateElements[0].cloneNode(true) as Element));
@@ -187,14 +184,14 @@ const promiseTransaction = () => {
                         Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.previousID}"]`)).forEach(item => {
                             if (item.nextElementSibling?.getAttribute("data-node-id") !== operation.id &&
                                 !hasClosestByAttribute(item, "data-node-id", operation.id) && // 段落转列表会在段落后插入新列表
-                                (item.getAttribute("data-type") === "NodeBlockQueryEmbed" || !hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed"))) {
+                                !isInEmbedBlock(item)) {
                                 item.insertAdjacentHTML("afterend", operation.data);
                                 cursorElements.push(item.nextElementSibling);
                             }
                         });
                     } else {
                         Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.parentID}"]`)).forEach(item => {
-                            if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" || !hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                            if (!isInEmbedBlock(item)) {
                                 // 列表特殊处理
                                 if (item.firstElementChild && item.firstElementChild.classList.contains("protyle-action") &&
                                     item.firstElementChild.nextElementSibling.getAttribute("data-node-id") !== operation.id) {
@@ -231,13 +228,13 @@ const promiseTransaction = () => {
                 //         blockRender(protyle, item);
                 //     }
                 // });
-                // 更新块引用
-                updateRef(protyle, operation.id);
             }
         });
 
         // 删除仅有的折叠标题后展开内容为空
-        if (protyle.wysiwyg.element.childElementCount === 0) {
+        if (protyle.wysiwyg.element.childElementCount === 0 &&
+            // 聚焦时不需要新增块，否则会导致 https://github.com/siyuan-note/siyuan/issues/12326 第一点
+            !protyle.block.showAll) {
             const newID = Lute.NewNodeID();
             const emptyElement = genEmptyElement(false, true, newID);
             protyle.wysiwyg.element.insertAdjacentElement("afterbegin", emptyElement);
@@ -280,7 +277,11 @@ const deleteBlock = (updateElements: Element[], id: string, protyle: IProtyle, i
         focusSideBlock(updateElements[0]);
     }
     updateElements.forEach(item => {
-        item.remove();
+        // 需移除顶层，否则删除唯一的列表项后列表无法清除干净 https://github.com/siyuan-note/siyuan/issues/12326 第一点
+        const topElement = getTopAloneElement(item);
+        if (topElement) {
+            topElement.remove();
+        }
     });
     // 更新 ws 嵌入块
     protyle.wysiwyg.element.querySelectorAll('[data-type="NodeBlockQueryEmbed"]').forEach((item) => {
@@ -301,8 +302,7 @@ const updateBlock = (updateElements: Element[], protyle: IProtyle, operation: IO
         }
     });
     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).find(item => {
-        if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" // 引用转换为块嵌入，undo、redo 后也需要更新 updateElement
-            || !hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+        if (!isInEmbedBlock(item)) {
             updateElements[0] = item;
             return true;
         }
@@ -324,15 +324,13 @@ const updateBlock = (updateElements: Element[], protyle: IProtyle, operation: IO
     blockRender(protyle, updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
     // 更新 ws 嵌入块
     updateEmbed(protyle, operation);
-    // 更新 ws 块引用
-    updateRef(protyle, operation.id);
 };
 
 // 用于推送和撤销
 export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: boolean) => {
     const updateElements: Element[] = [];
     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-        if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+        if (!isInEmbedBlock(item)) {
             updateElements.push(item);
         }
     });
@@ -384,6 +382,14 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                     item.remove();
                 });
             });
+            if (protyle.wysiwyg.element.childElementCount === 0) {
+                zoomOut({
+                    protyle,
+                    id: protyle.block.rootID,
+                    isPushBack: false,
+                    focusId: operation.id,
+                });
+            }
         }
         return;
     }
@@ -398,7 +404,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 focusId: operation.id,
                 callback() {
                     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-                        if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             updateElements.push(item);
                         }
                     });
@@ -419,7 +425,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 focusId: operation.id,
                 callback() {
                     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
-                        if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                        if (!isInEmbedBlock(item)) {
                             updateElements.push(item);
                         }
                     });
@@ -429,8 +435,6 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         } else { // updateElements 没有包含嵌入块，在悬浮层编辑嵌入块时，嵌入块也需要更新
             // 更新 ws 嵌入块
             updateEmbed(protyle, operation);
-            // 更新 ws 块引用
-            updateRef(protyle, operation.id);
         }
         return;
     }
@@ -575,7 +579,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         let hasFind = false;
         if (operation.previousID && updateElements.length > 0) {
             Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.previousID}"]`)).forEach(item => {
-                if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                if (!isInEmbedBlock(item)) {
                     item.after(processClonePHElement(updateElements[0].cloneNode(true) as Element));
                     hasFind = true;
                 }
@@ -586,7 +590,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 hasFind = true;
             } else {
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.parentID}"]`)).forEach(item => {
-                    if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                    if (!isInEmbedBlock(item)) {
                         // 列表特殊处理
                         if (item.firstElementChild?.classList.contains("protyle-action")) {
                             item.firstElementChild.after(processClonePHElement(updateElements[0].cloneNode(true) as Element));
@@ -609,7 +613,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
             if (operation.data === "focus") {
                 // 标记需要 focus，https://ld246.com/article/1650018446988/comment/1650081404993?r=Vanessa#comments
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).find(item => {
-                    if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                    if (!isInEmbedBlock(item)) {
                         focusBlock(item);
                         return true;
                     }
@@ -632,7 +636,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         const cursorElements = [];
         if (operation.previousID) {
             Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.previousID}"]`)).forEach(item => {
-                const embedElement = hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed");
+                const embedElement = isInEmbedBlock(item);
                 if (embedElement) {
                     // https://github.com/siyuan-note/siyuan/issues/5524
                     embedElement.removeAttribute("data-render");
@@ -648,7 +652,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 cursorElements.push(protyle.wysiwyg.element.firstElementChild);
             } else {
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.parentID}"]`)).forEach(item => {
-                    if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                    if (!isInEmbedBlock(item)) {
                         // 列表特殊处理
                         if (item.firstElementChild?.classList.contains("protyle-action")) {
                             item.firstElementChild.insertAdjacentHTML("afterend", operation.data);
@@ -687,8 +691,6 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 wbrElement.remove();
             }
         });
-        // 更新 ws 块引用
-        updateRef(protyle, operation.id);
         return;
     }
     if (operation.action === "append") {
@@ -1054,23 +1056,6 @@ export const turnsOneInto = async (options: {
     processRender(options.protyle.wysiwyg.element);
     highlightRender(options.protyle.wysiwyg.element);
     avRender(options.protyle.wysiwyg.element, options.protyle);
-};
-
-const updateRef = (protyle: IProtyle, id: string, index = 0) => {
-    if (index > 6) {
-        return;
-    }
-    protyle.wysiwyg.element.querySelectorAll(`[data-type~="block-ref"][data-id="${id}"]`).forEach(item => {
-        if (item.getAttribute("data-subtype") === "d") {
-            fetchPost("/api/block/getRefText", {id: id}, (response) => {
-                item.innerHTML = response.data;
-                const blockElement = hasClosestBlock(item);
-                if (blockElement) {
-                    updateRef(protyle, blockElement.getAttribute("data-node-id"), index + 1);
-                }
-            });
-        }
-    });
 };
 
 let transactionsTimeout: number;

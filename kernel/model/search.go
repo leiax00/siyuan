@@ -56,7 +56,7 @@ func ListInvalidBlockRefs(page, pageSize int) (ret []*Block, matchedBlockCount, 
 	blockMap := map[string]bool{}
 	var invalidBlockIDs []string
 	notebooks, err := ListNotebooks()
-	if nil != err {
+	if err != nil {
 		return
 	}
 	luteEngine := util.NewLute()
@@ -322,12 +322,19 @@ func SearchRefBlock(id, rootID, keyword string, beforeLen int, isSquareBrackets,
 	if "" == keyword {
 		// 查询为空时默认的块引排序规则按最近使用优先 https://github.com/siyuan-note/siyuan/issues/3218
 
+		typeFilter := Conf.Search.TypeFilter()
 		ignoreLines := getRefSearchIgnoreLines()
-		refs := sql.QueryRefsRecent(onlyDoc, ignoreLines)
+		refs := sql.QueryRefsRecent(onlyDoc, typeFilter, ignoreLines)
+		var btsID []string
+		for _, ref := range refs {
+			btsID = append(btsID, ref.DefBlockRootID)
+		}
+		btsID = gulu.Str.RemoveDuplicatedElem(btsID)
+		bts := treenode.GetBlockTrees(btsID)
 		for _, ref := range refs {
 			tree := cachedTrees[ref.DefBlockRootID]
 			if nil == tree {
-				tree, _ = LoadTreeByBlockID(ref.DefBlockRootID)
+				tree, _ = loadTreeByBlockTree(bts[ref.DefBlockRootID])
 			}
 			if nil == tree {
 				continue
@@ -360,10 +367,16 @@ func SearchRefBlock(id, rootID, keyword string, beforeLen int, isSquareBrackets,
 
 	ret = fullTextSearchRefBlock(keyword, beforeLen, onlyDoc)
 	tmp := ret[:0]
+	var btsID []string
+	for _, b := range ret {
+		btsID = append(btsID, b.RootID)
+	}
+	btsID = gulu.Str.RemoveDuplicatedElem(btsID)
+	bts := treenode.GetBlockTrees(btsID)
 	for _, b := range ret {
 		tree := cachedTrees[b.RootID]
 		if nil == tree {
-			tree, _ = LoadTreeByBlockID(b.RootID)
+			tree, _ = loadTreeByBlockTree(bts[b.RootID])
 		}
 		if nil == tree {
 			continue
@@ -376,7 +389,7 @@ func SearchRefBlock(id, rootID, keyword string, beforeLen int, isSquareBrackets,
 			// `((` 引用候选中排除当前块的父块 https://github.com/siyuan-note/siyuan/issues/4538
 			tree := cachedTrees[b.RootID]
 			if nil == tree {
-				tree, _ = LoadTreeByBlockID(b.RootID)
+				tree, _ = loadTreeByBlockTree(bts[b.RootID])
 				cachedTrees[b.RootID] = tree
 			}
 			if nil != tree {
@@ -456,7 +469,7 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 	cachedTrees := map[string]*parse.Tree{}
 
 	historyDir, err := getHistoryDir(HistoryOpReplace, time.Now())
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("get history dir failed: %s", err)
 		return
 	}
@@ -486,7 +499,7 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 		}
 
 		historyPath := filepath.Join(historyDir, tree.Box, tree.Path)
-		if err = os.MkdirAll(filepath.Dir(historyPath), 0755); nil != err {
+		if err = os.MkdirAll(filepath.Dir(historyPath), 0755); err != nil {
 			logging.LogErrorf("generate history failed: %s", err)
 			return
 		}
@@ -506,6 +519,8 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 	}
 	indexHistoryDir(filepath.Base(historyDir), util.NewLute())
 
+	luteEngine := util.NewLute()
+	var reloadTreeIDs []string
 	for i, id := range ids {
 		bt := treenode.GetBlockTree(id)
 		if nil == bt {
@@ -521,6 +536,8 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 		if nil == node {
 			continue
 		}
+
+		reloadTreeIDs = append(reloadTreeIDs, tree.ID)
 
 		if ast.NodeDocument == node.Type {
 			if !replaceTypes["docTitle"] {
@@ -542,7 +559,6 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 				}
 			}
 		} else {
-			luteEngine := util.NewLute()
 			var unlinks []*ast.Node
 			ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 				if !entering {
@@ -735,6 +751,22 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 						}
 
 						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "text")
+					} else if n.IsTextMarkType("block-ref") {
+						if !replaceTypes["blockRef"] {
+							return ast.WalkContinue
+						}
+
+						if 0 == method {
+							if strings.Contains(n.TextMarkTextContent, keyword) {
+								n.TextMarkTextContent = strings.ReplaceAll(n.TextMarkTextContent, keyword, replacement)
+								n.TextMarkBlockRefSubtype = "s"
+							}
+						} else if 3 == method {
+							if nil != r && r.MatchString(n.TextMarkTextContent) {
+								n.TextMarkTextContent = r.ReplaceAllString(n.TextMarkTextContent, replacement)
+								n.TextMarkBlockRefSubtype = "s"
+							}
+						}
 					}
 				}
 				return ast.WalkContinue
@@ -744,7 +776,7 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 				unlink.Unlink()
 			}
 
-			if err = writeTreeUpsertQueue(tree); nil != err {
+			if err = writeTreeUpsertQueue(tree); err != nil {
 				return
 			}
 		}
@@ -760,12 +792,13 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 	}
 
 	WaitForWritingFiles()
-	if 0 < len(ids) {
-		go func() {
-			time.Sleep(time.Millisecond * 500)
-			util.ReloadUI()
-		}()
+
+	reloadTreeIDs = gulu.Str.RemoveDuplicatedElem(reloadTreeIDs)
+	for _, id := range reloadTreeIDs {
+		util.PushProtyleReload(id)
 	}
+
+	util.PushClearProgress()
 	return
 }
 
@@ -889,11 +922,17 @@ func FullTextSearchBlock(query string, boxes, paths []string, types map[string]b
 		rootMap := map[string]bool{}
 		var rootIDs []string
 		contentSorts := map[string]int{}
+		var btsID []string
+		for _, b := range blocks {
+			btsID = append(btsID, b.RootID)
+		}
+		btsID = gulu.Str.RemoveDuplicatedElem(btsID)
+		bts := treenode.GetBlockTrees(btsID)
 		for _, b := range blocks {
 			if _, ok := rootMap[b.RootID]; !ok {
 				rootMap[b.RootID] = true
 				rootIDs = append(rootIDs, b.RootID)
-				tree, _ := LoadTreeByBlockID(b.RootID)
+				tree, _ := loadTreeByBlockTree(bts[b.RootID])
 				if nil == tree {
 					continue
 				}
@@ -1034,7 +1073,7 @@ func buildOrderBy(query string, method, orderBy int) string {
 
 func buildTypeFilter(types map[string]bool) string {
 	s := conf.NewSearch()
-	if err := copier.Copy(s, Conf.Search); nil != err {
+	if err := copier.Copy(s, Conf.Search); err != nil {
 		logging.LogErrorf("copy search conf failed: %s", err)
 	}
 	if nil != types {
@@ -1106,7 +1145,7 @@ func searchBySQL(stmt string, beforeLen, page, pageSize int) (ret []*Block, matc
 
 func removeLimitClause(stmt string) string {
 	parsedStmt, err := sqlparser.Parse(stmt)
-	if nil != err {
+	if err != nil {
 		return stmt
 	}
 
@@ -1693,17 +1732,17 @@ func getSearchIgnoreLines() (ret []string) {
 
 	searchIgnorePath := filepath.Join(util.DataDir, ".siyuan", "searchignore")
 	err := os.MkdirAll(filepath.Dir(searchIgnorePath), 0755)
-	if nil != err {
+	if err != nil {
 		return
 	}
 	if !gulu.File.IsExist(searchIgnorePath) {
-		if err = gulu.File.WriteFileSafer(searchIgnorePath, nil, 0644); nil != err {
+		if err = gulu.File.WriteFileSafer(searchIgnorePath, nil, 0644); err != nil {
 			logging.LogErrorf("create searchignore [%s] failed: %s", searchIgnorePath, err)
 			return
 		}
 	}
 	data, err := os.ReadFile(searchIgnorePath)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("read searchignore [%s] failed: %s", searchIgnorePath, err)
 		return
 	}
@@ -1743,17 +1782,17 @@ func getRefSearchIgnoreLines() (ret []string) {
 
 	searchIgnorePath := filepath.Join(util.DataDir, ".siyuan", "refsearchignore")
 	err := os.MkdirAll(filepath.Dir(searchIgnorePath), 0755)
-	if nil != err {
+	if err != nil {
 		return
 	}
 	if !gulu.File.IsExist(searchIgnorePath) {
-		if err = gulu.File.WriteFileSafer(searchIgnorePath, nil, 0644); nil != err {
+		if err = gulu.File.WriteFileSafer(searchIgnorePath, nil, 0644); err != nil {
 			logging.LogErrorf("create refsearchignore [%s] failed: %s", searchIgnorePath, err)
 			return
 		}
 	}
 	data, err := os.ReadFile(searchIgnorePath)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("read refsearchignore [%s] failed: %s", searchIgnorePath, err)
 		return
 	}

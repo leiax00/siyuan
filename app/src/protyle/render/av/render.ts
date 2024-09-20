@@ -4,7 +4,7 @@ import {Constants} from "../../../constants";
 import {addDragFill, renderCell} from "./cell";
 import {unicode2Emoji} from "../../../emoji";
 import {focusBlock} from "../../util/selection";
-import {hasClosestBlock, hasClosestByAttribute, hasClosestByClassName} from "../../util/hasClosest";
+import {hasClosestBlock, hasClosestByClassName, isInEmbedBlock} from "../../util/hasClosest";
 import {stickyRow, updateHeader} from "./row";
 import {getCalcValue} from "./calc";
 import {renderAVAttribute} from "./blockAttr";
@@ -83,7 +83,7 @@ export const avRender = (element: Element, protyle: IProtyle, cb?: () => void, v
                 snapshot,
                 pageSize: parseInt(e.dataset.pageSize) || undefined,
                 viewID: newViewID,
-                query
+                query: query.trim()
             }, (response) => {
                 const data = response.data.view as IAVTable;
                 if (!e.dataset.pageSize) {
@@ -206,7 +206,7 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                 let avBackground = "--av-background:var(--b3-theme-background)";
                 if (e.style.backgroundColor) {
                     avBackground = "--av-background:" + e.style.backgroundColor;
-                } else if (hasClosestByAttribute(e, "data-type", "NodeBlockQueryEmbed")) {
+                } else if (isInEmbedBlock(e)) {
                     avBackground = "--av-background:var(--b3-theme-surface)";
                 }
                 e.firstElementChild.outerHTML = `<div class="av__container" style="${avBackground}">
@@ -347,7 +347,7 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                 }
                 const viewsElement = e.querySelector(".av__views") as HTMLElement;
                 searchInputElement = e.querySelector('[data-type="av-search"]') as HTMLInputElement;
-                searchInputElement.value = query;
+                searchInputElement.value = query || "";
                 if (isSearching) {
                     searchInputElement.focus();
                 }

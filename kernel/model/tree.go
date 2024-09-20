@@ -39,7 +39,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func resetTree(tree *parse.Tree, titleSuffix string) {
+func resetTree(tree *parse.Tree, titleSuffix string, removeAvBinding bool) {
 	tree.ID = ast.NewNodeID()
 	tree.Root.ID = tree.ID
 
@@ -121,8 +121,10 @@ func resetTree(tree *parse.Tree, titleSuffix string) {
 		return ast.WalkContinue
 	})
 
-	// 清空文档绑定的数据库
-	tree.Root.RemoveIALAttr(av.NodeAttrNameAvs)
+	if removeAvBinding {
+		// 清空文档绑定的数据库
+		tree.Root.RemoveIALAttr(av.NodeAttrNameAvs)
+	}
 }
 
 func pagedPaths(localPath string, pageSize int) (ret map[int][]string) {
@@ -151,13 +153,13 @@ func pagedPaths(localPath string, pageSize int) (ret map[int][]string) {
 
 func loadTree(localPath string, luteEngine *lute.Lute) (ret *parse.Tree, err error) {
 	data, err := filelock.ReadFile(localPath)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("get data [path=%s] failed: %s", localPath, err)
 		return
 	}
 
 	ret, err = filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("parse json to tree [%s] failed: %s", localPath, err)
 		return
 	}
@@ -175,6 +177,7 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 	// 仅提供给 getBlockInfo 接口使用
 
 	if "" == id {
+		logging.LogWarnf("block id is empty")
 		return nil, ErrTreeNotFound
 	}
 
@@ -189,6 +192,7 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 		searchTreeInFilesystem(id)
 		bt = treenode.GetBlockTree(id)
 		if nil == bt {
+			logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, logging.ShortStack())
 			return nil, ErrTreeNotFound
 		}
 	}
@@ -200,6 +204,7 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 
 func LoadTreeByBlockID(id string) (ret *parse.Tree, err error) {
 	if "" == id {
+		logging.LogErrorf("block id is empty")
 		return nil, ErrTreeNotFound
 	}
 
@@ -209,9 +214,19 @@ func LoadTreeByBlockID(id string) (ret *parse.Tree, err error) {
 			err = ErrIndexing
 			return
 		}
+
+		stack := logging.ShortStack()
+		if !strings.Contains(stack, "BuildBlockBreadcrumb") {
+			logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, stack)
+		}
 		return nil, ErrTreeNotFound
 	}
 
+	ret, err = loadTreeByBlockTree(bt)
+	return
+}
+
+func loadTreeByBlockTree(bt *treenode.BlockTree) (ret *parse.Tree, err error) {
 	luteEngine := util.NewLute()
 	ret, err = filesys.LoadTree(bt.BoxID, bt.Path, luteEngine)
 	return
@@ -269,7 +284,7 @@ func searchTreeInFilesystem(rootID string) {
 	}
 
 	tree, err := filesys.LoadTree(boxID, treePath, util.NewLute())
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("load tree [%s] failed: %s", treePath, err)
 		return
 	}
