@@ -27,8 +27,8 @@ export const init = (app: App) => {
             afterLayout(app);
             return;
         }
-        const tabJSON = JSON.parse(getSearch("json"));
-        tabJSON.active = true;
+        const tabsJSON = JSON.parse(getSearch("json"));
+        tabsJSON[tabsJSON.length - 1].active = true;
         JSONToCenter(app, {
             direction: "lr",
             resize: "lr",
@@ -37,7 +37,7 @@ export const init = (app: App) => {
             instance: "Layout",
             children: [{
                 instance: "Wnd",
-                children: [tabJSON]
+                children: tabsJSON
             }]
         });
         window.siyuan.layout.centerLayout = window.siyuan.layout.layout;
@@ -65,7 +65,6 @@ const afterLayout = (app: App) => {
         afterLoadPlugin(item);
     });
     document.querySelectorAll('li[data-type="tab-header"][data-init-active="true"]').forEach((item: HTMLElement) => {
-        item.removeAttribute("data-init-active");
         const tab = getInstanceById(item.getAttribute("data-id")) as Tab;
         tab.parent.switchTab(item, false, false);
     });

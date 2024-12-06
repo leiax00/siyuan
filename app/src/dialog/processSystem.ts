@@ -23,7 +23,7 @@ import {setEmpty} from "../mobile/util/setEmpty";
 import {hideAllElements, hideElements} from "../protyle/ui/hideElements";
 import {App} from "../index";
 import {saveScroll} from "../protyle/scroll/saveScroll";
-import {isInAndroid, isInIOS, setStorageVal} from "../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, isInIOS, setStorageVal} from "../protyle/util/compatibility";
 import {Plugin} from "../plugin";
 
 const updateTitle = (rootID: string, tab: Tab, protyle?: IProtyle) => {
@@ -43,7 +43,8 @@ export const reloadSync = (
     hideMsg = true,
     // 同步的时候需要更新只读状态 https://github.com/siyuan-note/siyuan/issues/11517
     // 调整大纲的时候需要使用现有状态 https://github.com/siyuan-note/siyuan/issues/11808
-    updateReadonly = true
+    updateReadonly = true,
+    onlyUpdateDoc = false
 ) => {
     if (hideMsg) {
         hideMessage();
@@ -70,7 +71,7 @@ export const reloadSync = (
         }
     }
     setNoteBook(() => {
-        window.siyuan.mobile.files.init(false);
+        window.siyuan.mobile.docks.file.init(false);
     });
     /// #else
     const allModels = getAllModels();
@@ -105,6 +106,7 @@ export const reloadSync = (
         } else if (item.type !== "local" || data.upsertRootIDs.includes(item.blockId)) {
             fetchPost("/api/outline/getDocOutline", {
                 id: item.blockId,
+                preview: item.isPreview
             }, response => {
                 item.update(response);
             });
@@ -123,11 +125,13 @@ export const reloadSync = (
             }
         }
     });
-    allModels.files.forEach(item => {
-        setNoteBook(() => {
-            item.init(false);
+    if (!onlyUpdateDoc) {
+        allModels.files.forEach(item => {
+            setNoteBook(() => {
+                item.init(false);
+            });
         });
-    });
+    }
     allModels.bookmark.forEach(item => {
         item.update();
     });
@@ -153,7 +157,7 @@ export const setRefDynamicText = (data: {
     "rootID": string
 }) => {
     getAllEditor().forEach(item => {
-        // 不能对比 rootId，否则潜入块中的锚文本无法更新
+        // 不能对比 rootId，否则嵌入块中的锚文本无法更新
         item.protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${data.blockID}"] span[data-type="block-ref"][data-subtype="d"][data-id="${data.defBlockID}"]`).forEach(item => {
             item.innerHTML = data.refText;
         });
@@ -167,10 +171,13 @@ export const setDefRefCount = (data: {
     "rootID": string
     refIDs: string[]
 }) => {
-    getAllEditor().forEach(item => {
-        if (data.rootID === data.blockID && item.protyle.block.rootID === data.rootID) {
-            const attrElement = item.protyle.title.element.querySelector(".protyle-attr");
-            const countElement = attrElement.querySelector(".popover__block");
+    getAllEditor().forEach(editor => {
+        if (data.rootID === data.blockID && editor.protyle.block.rootID === data.rootID) {
+            if (!editor.protyle.title) {
+                return;
+            }
+            const attrElement = editor.protyle.title.element.querySelector(".protyle-attr");
+            const countElement = attrElement.querySelector(".protyle-attr--refcount");
             if (countElement) {
                 if (data.refCount === 0) {
                     countElement.remove();
@@ -183,9 +190,10 @@ export const setDefRefCount = (data: {
             }
             return;
         }
-        // 不能对比 rootId，否则潜入块中的锚文本无法更新
-        item.protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${data.blockID}"]`).forEach(item => {
-            const countElement = item.querySelector(".protyle-attr--refcount");
+        // 不能对比 rootId，否则嵌入块中的锚文本无法更新
+        editor.protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${data.blockID}"]`).forEach(item => {
+            // 不能直接查询，否则列表中会获取到第一个列表项的 attr https://github.com/siyuan-note/siyuan/issues/12738
+            const countElement = item.lastElementChild.querySelector(".protyle-attr--refcount");
             if (countElement) {
                 if (data.refCount === 0) {
                     countElement.remove();
@@ -193,19 +201,24 @@ export const setDefRefCount = (data: {
                     countElement.textContent = data.refCount.toString();
                 }
             } else if (data.refCount > 0) {
-                const attrElement = item.querySelector(".protyle-attr");
+                const attrElement = item.lastElementChild;
                 if (attrElement.childElementCount > 0) {
                     attrElement.lastElementChild.insertAdjacentHTML("afterend", `<div class="protyle-attr--refcount popover__block">${data.refCount}</div>`);
                 } else {
                     attrElement.innerHTML = `<div class="protyle-attr--refcount popover__block">${data.refCount}</div>${Constants.ZWSP}`;
                 }
             }
+            if (data.refCount === 0) {
+                item.removeAttribute("refcount");
+            } else {
+                item.setAttribute("refcount", data.refCount.toString());
+            }
         });
     });
 
     let liElement;
     /// #if MOBILE
-    liElement = window.siyuan.mobile.files.element.querySelector(`li[data-node-id="${data.rootID}"]`);
+    liElement = window.siyuan.mobile.docks.file.element.querySelector(`li[data-node-id="${data.rootID}"]`);
     /// #else
     liElement = (getDockByType("file").data.file as Files).element.querySelector(`li[data-node-id="${data.rootID}"]`);
     /// #endif
@@ -271,11 +284,11 @@ export const kernelError = () => {
     }
 };
 
-export const exitSiYuan = () => {
+export const exitSiYuan = async () => {
     hideAllElements(["util"]);
     /// #if MOBILE
     if (window.siyuan.mobile.editor) {
-        saveScroll(window.siyuan.mobile.editor.protyle);
+        await saveScroll(window.siyuan.mobile.editor.protyle);
     }
     /// #endif
     fetchPost("/api/system/exit", {force: false}, (response) => {
@@ -288,7 +301,7 @@ export const exitSiYuan = () => {
                         /// #if !BROWSER
                         ipcRenderer.send(Constants.SIYUAN_QUIT, location.port);
                         /// #else
-                        if (isInIOS() || isInAndroid()) {
+                        if (isInIOS() || isInAndroid() || isInHarmony()) {
                             window.location.href = "siyuan://api/system/exit";
                         }
                         /// #endif
@@ -328,7 +341,7 @@ export const exitSiYuan = () => {
             /// #if !BROWSER
             ipcRenderer.send(Constants.SIYUAN_QUIT, location.port);
             /// #else
-            if (isInIOS() || isInAndroid()) {
+            if (isInIOS() || isInAndroid() || isInHarmony()) {
                 window.location.href = "siyuan://api/system/exit";
             }
             /// #endif
@@ -395,7 +408,7 @@ export const progressStatus = (data: IWebSocketData) => {
         statusElement.style.bottom = "0";
         statusTimeout = window.setTimeout(() => {
             statusElement.style.bottom = "";
-        }, 7000);
+        }, 12000);
     } else {
         const msgElement = statusElement.querySelector(".status__msg");
         if (msgElement) {
@@ -403,7 +416,7 @@ export const progressStatus = (data: IWebSocketData) => {
             msgElement.innerHTML = data.msg;
             statusTimeout = window.setTimeout(() => {
                 msgElement.innerHTML = "";
-            }, 7000);
+            }, 12000);
         }
     }
 };
@@ -424,7 +437,7 @@ export const progressLoading = (data: IWebSocketData) => {
 <div class="b3-dialog__loading">
     <div style="text-align: right">${data.data.current}/${data.data.total}</div>
     <div style="margin: 8px 0;height: 8px;border-radius: var(--b3-border-radius);overflow: hidden;background-color:#fff;"><div style="width: ${data.data.current / data.data.total * 100}%;transition: var(--b3-transition);background-color: var(--b3-theme-primary);height: 8px;"></div></div>
-    <div>${data.msg}</div>
+    <div class="ft__breakword">${data.msg}</div>
 </div>`;
     } else if (data.code === 1) {
         if (progressElement.lastElementChild) {
@@ -433,7 +446,7 @@ export const progressLoading = (data: IWebSocketData) => {
             progressElement.innerHTML = `<div class="b3-dialog__scrim" style="opacity: 1"></div>
 <div class="b3-dialog__loading">
     <div style="margin: 8px 0;height: 8px;border-radius: var(--b3-border-radius);overflow: hidden;background-color:#fff;"><div style="background-color: var(--b3-theme-primary);height: 8px;background-image: linear-gradient(-45deg, rgba(255, 255, 255, 0.2) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 75%, transparent 75%, transparent);animation: stripMove 450ms linear infinite;background-size: 50px 50px;"></div></div>
-    <div>${data.msg}</div>
+    <div class="ft__breakword">${data.msg}</div>
 </div>`;
         }
     }

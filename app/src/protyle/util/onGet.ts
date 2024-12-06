@@ -24,7 +24,7 @@ import {getContenteditableElement} from "../wysiwyg/getBlock";
 export const onGet = (options: {
     data: IWebSocketData,
     protyle: IProtyle,
-    action?: string[],
+    action?: TProtyleAction[],
     scrollAttr?: IScrollAttr
     updateReadonly?: boolean
     afterCB?: () => void
@@ -249,6 +249,12 @@ const setHTML = (options: {
         return;
     }
 
+    /// #if MOBILE
+    if (!protyle.disabled && !options.action.includes(Constants.CB_GET_ALL) && protyle.background) {
+        protyle.background.element.classList.add("protyle-background--mobileshow");
+    }
+    /// #endif
+
     if (protyle.options.render.breadcrumb) {
         protyle.breadcrumb.toggleExit(!options.action.includes(Constants.CB_GET_ALL));
         protyle.breadcrumb.render(protyle);
@@ -284,7 +290,6 @@ const setHTML = (options: {
 
     }
     protyle.app.plugins.forEach(item => {
-        item.eventBus.emit("loaded-protyle", protyle);  // 准备废弃
         item.eventBus.emit("loaded-protyle-static", {protyle});
     });
 };

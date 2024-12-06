@@ -8,7 +8,7 @@ import {setEditMode} from "../util/setEditMode";
 import {RecordMedia} from "../util/RecordMedia";
 import {hideMessage, showMessage} from "../../dialog/message";
 import {uploadFiles} from "../upload";
-import {hasClosestBlock, hasClosestByAttribute} from "../util/hasClosest";
+import {hasClosestBlock, hasClosestByAttribute, hasTopClosestByClassName} from "../util/hasClosest";
 import {needSubscribe} from "../../util/needSubscribe";
 import {isMobile} from "../../util/functions";
 import {zoomOut} from "../../menus/protyle";
@@ -28,9 +28,10 @@ import {Menu} from "../../plugin/Menu";
 import {getNoContainerElement} from "../wysiwyg/getBlock";
 import {openTitleMenu} from "../header/openTitleMenu";
 import {emitOpenMenu} from "../../plugin/EventBus";
-import {isInAndroid, isIPad, isMac, updateHotkeyTip} from "../util/compatibility";
+import {isInAndroid, isInHarmony, isIPad, isMac, updateHotkeyTip} from "../util/compatibility";
 import {resize} from "../util/resize";
 import {listIndent, listOutdent} from "../wysiwyg/list";
+import {improveBreadcrumbAppearance} from "../wysiwyg/renderBacklink";
 
 export class Breadcrumb {
     public element: HTMLElement;
@@ -43,7 +44,7 @@ export class Breadcrumb {
         element.className = "protyle-breadcrumb";
         let padHTML = "";
         /// #if BROWSER && !MOBILE
-        if (isIPad() || isInAndroid()) {
+        if (isIPad() || isInAndroid() || isInHarmony()) {
             padHTML = `<button class="block__icon fn__flex-center ariaLabel" disabled aria-label="${window.siyuan.languages.undo}" data-type="undo"><svg><use xlink:href="#iconUndo"></use></svg></button>
 <button class="block__icon fn__flex-center ariaLabel" disabled aria-label="${window.siyuan.languages.redo}" data-type="redo"><svg><use xlink:href="#iconRedo"></use></svg></button>
 <button class="block__icon fn__flex-center ariaLabel" disabled aria-label="${window.siyuan.languages.outdent}" data-type="outdent"><svg><use xlink:href="#iconOutdent"></use></svg></button>
@@ -280,6 +281,7 @@ ${padHTML}
                     uploadHTML += ">";
                 }
                 const uploadMenu = new MenuItem({
+                    id: "insertAsset",
                     icon: "iconDownload",
                     label: `${window.siyuan.languages.insertAsset}${uploadHTML}`,
                 }).element;
@@ -293,8 +295,9 @@ ${padHTML}
                     window.siyuan.menus.menu.remove();
                 });
                 window.siyuan.menus.menu.append(uploadMenu);
-                if (!isInAndroid()) {
+                if (!isInAndroid() && !isInHarmony()) {
                     window.siyuan.menus.menu.append(new MenuItem({
+                        id: this.mediaRecorder?.isRecording ? "endRecord" : "startRecord",
                         current: this.mediaRecorder && this.mediaRecorder.isRecording,
                         icon: "iconRecord",
                         label: this.mediaRecorder?.isRecording ? window.siyuan.languages.endRecord : window.siyuan.languages.startRecord,
@@ -351,6 +354,7 @@ ${padHTML}
             }
             if (!protyle.disabled) {
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "netImg2LocalAsset",
                     label: window.siyuan.languages.netImg2LocalAsset,
                     icon: "iconImgDown",
                     accelerator: window.siyuan.config.keymap.editor.general.netImg2LocalAsset.custom,
@@ -359,6 +363,7 @@ ${padHTML}
                     }
                 }).element);
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "netAssets2LocalAssets",
                     label: window.siyuan.languages.netAssets2LocalAssets,
                     icon: "iconTransform",
                     accelerator: window.siyuan.config.keymap.editor.general.netAssets2LocalAssets.custom,
@@ -367,6 +372,7 @@ ${padHTML}
                     }
                 }).element);
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "uploadAssets2CDN",
                     label: window.siyuan.languages.uploadAssets2CDN,
                     icon: "iconCloudSucc",
                     click() {
@@ -379,6 +385,7 @@ ${padHTML}
                 }).element);
                 if (window.siyuan.user) { // 登录链滴账号后即可使用 `分享到链滴` https://github.com/siyuan-note/siyuan/issues/7392
                     window.siyuan.menus.menu.append(new MenuItem({
+                        id: "share2Liandi",
                         label: window.siyuan.languages.share2Liandi,
                         icon: "iconLiandi",
                         click() {
@@ -391,6 +398,7 @@ ${padHTML}
             }
             if (!protyle.scroll?.element.classList.contains("fn__none")) {
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "keepLazyLoad",
                     current: protyle.scroll.keepLazyLoad,
                     label: window.siyuan.languages.keepLazyLoad,
                     click: () => {
@@ -399,9 +407,10 @@ ${padHTML}
                 }).element);
             }
             if (window.siyuan.menus.menu.element.lastElementChild.childElementCount > 0) {
-                window.siyuan.menus.menu.append(new MenuItem({type: "separator"}).element);
+                window.siyuan.menus.menu.append(new MenuItem({id: "separator_1", type: "separator"}).element);
             }
             window.siyuan.menus.menu.append(new MenuItem({
+                id: "refresh",
                 icon: "iconRefresh",
                 accelerator: window.siyuan.config.keymap.editor.general.refresh.custom,
                 label: window.siyuan.languages.refresh,
@@ -411,6 +420,7 @@ ${padHTML}
             }).element);
             if (!protyle.disabled) {
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "optimizeTypography",
                     label: window.siyuan.languages.optimizeTypography,
                     accelerator: window.siyuan.config.keymap.editor.general.optimizeTypography.custom,
                     icon: "iconFormat",
@@ -424,6 +434,7 @@ ${padHTML}
             }
             /// #if !MOBILE
             window.siyuan.menus.menu.append(new MenuItem({
+                id: "fullscreen",
                 icon: protyle.element.className.includes("fullscreen") ? "iconFullscreenExit" : "iconFullscreen",
                 accelerator: window.siyuan.config.keymap.editor.general.fullscreen.custom,
                 label: window.siyuan.languages.fullscreen,
@@ -434,10 +445,12 @@ ${padHTML}
             }).element);
             /// #endif
             window.siyuan.menus.menu.append(new MenuItem({
+                id: "editMode",
                 icon: "iconEdit",
                 label: window.siyuan.languages["edit-mode"],
                 type: "submenu",
                 submenu: [{
+                    id: "wysiwyg",
                     current: !protyle.contentElement.classList.contains("fn__none"),
                     label: window.siyuan.languages.wysiwyg,
                     accelerator: window.siyuan.config.keymap.editor.general.wysiwyg.custom,
@@ -455,6 +468,7 @@ ${padHTML}
                         /// #endif
                     }
                 }, {
+                    id: "preview",
                     current: !protyle.preview.element.classList.contains("fn__none"),
                     icon: "iconPreview",
                     label: window.siyuan.languages.preview,
@@ -471,10 +485,12 @@ ${padHTML}
             if (!window.siyuan.config.editor.readOnly && !window.siyuan.config.readonly) {
                 const isCustomReadonly = protyle.wysiwyg.element.getAttribute(Constants.CUSTOM_SY_READONLY);
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "editReadonly",
                     label: window.siyuan.languages.editReadonly,
                     icon: "iconLock",
                     type: "submenu",
                     submenu: [{
+                        id: "enable",
                         iconHTML: "",
                         current: isCustomReadonly === "true",
                         label: window.siyuan.languages.enable,
@@ -485,6 +501,7 @@ ${padHTML}
                             });
                         }
                     }, {
+                        id: "disable",
                         iconHTML: "",
                         current: !isCustomReadonly || isCustomReadonly === "false",
                         label: window.siyuan.languages.disable,
@@ -501,10 +518,12 @@ ${padHTML}
             if (!protyle.disabled) {
                 const isCustomFullWidth = protyle.wysiwyg.element.getAttribute(Constants.CUSTOM_SY_FULLWIDTH);
                 window.siyuan.menus.menu.append(new MenuItem({
+                    id: "fullWidth",
                     label: window.siyuan.languages.fullWidth,
                     icon: "iconDock",
                     type: "submenu",
                     submenu: [{
+                        id: "enable",
                         iconHTML: "",
                         current: isCustomFullWidth === "true",
                         label: window.siyuan.languages.enable,
@@ -515,6 +534,7 @@ ${padHTML}
                             });
                         }
                     }, {
+                        id: "disable",
                         iconHTML: "",
                         current: isCustomFullWidth === "false",
                         label: window.siyuan.languages.disable,
@@ -525,6 +545,7 @@ ${padHTML}
                             });
                         }
                     }, {
+                        id: "default",
                         iconHTML: "",
                         current: !isCustomFullWidth,
                         label: window.siyuan.languages.default,
@@ -549,18 +570,21 @@ ${padHTML}
                     separatorPosition: "top",
                 });
             }
-            window.siyuan.menus.menu.append(new MenuItem({type: "separator"}).element);
+            window.siyuan.menus.menu.append(new MenuItem({id: "separator_2", type: "separator"}).element);
             window.siyuan.menus.menu.append(new MenuItem({
+                id: "docInfo",
                 iconHTML: "",
                 type: "readonly",
                 // 不能换行，否则移动端间距过大
-                label: `<div class="fn__flex">${window.siyuan.languages.runeCount}<span class="fn__space fn__flex-1"></span>${response.data.runeCount}</div><div class="fn__flex">${window.siyuan.languages.wordCount}<span class="fn__space fn__flex-1"></span>${response.data.wordCount}</div><div class="fn__flex">${window.siyuan.languages.linkCount}<span class="fn__space fn__flex-1"></span>${response.data.linkCount}</div><div class="fn__flex">${window.siyuan.languages.imgCount}<span class="fn__space fn__flex-1"></span>${response.data.imageCount}</div><div class="fn__flex">${window.siyuan.languages.refCount}<span class="fn__space fn__flex-1"></span>${response.data.refCount}</div>`,
+                label: `<div class="fn__flex">${window.siyuan.languages.runeCount}<span class="fn__space fn__flex-1"></span>${response.data.runeCount}</div><div class="fn__flex">${window.siyuan.languages.wordCount}<span class="fn__space fn__flex-1"></span>${response.data.wordCount}</div><div class="fn__flex">${window.siyuan.languages.linkCount}<span class="fn__space fn__flex-1"></span>${response.data.linkCount}</div><div class="fn__flex">${window.siyuan.languages.imgCount}<span class="fn__space fn__flex-1"></span>${response.data.imageCount}</div><div class="fn__flex">${window.siyuan.languages.refCount}<span class="fn__space fn__flex-1"></span>${response.data.refCount}</div><div class="fn__flex">${window.siyuan.languages.blockCount}<span class="fn__space fn__flex-1"></span>${response.data.blockCount}</div>`,
             }).element);
             /// #if MOBILE
             window.siyuan.menus.menu.fullscreen();
             /// #else
             window.siyuan.menus.menu.popup(position);
             /// #endif
+            const popoverElement = hasTopClosestByClassName(protyle.element, "block__popover", true);
+            window.siyuan.menus.menu.element.setAttribute("data-from", popoverElement ? popoverElement.dataset.level + "popover" : "app");
         });
     }
 
@@ -628,30 +652,8 @@ ${padHTML}
                     html += '<svg class="protyle-breadcrumb__arrow"><use xlink:href="#iconRight"></use></svg>';
                 }
             });
-            this.element.classList.remove("protyle-breadcrumb__bar--nowrap");
             this.element.innerHTML = html;
-            const itemElements = Array.from(this.element.querySelectorAll(".protyle-breadcrumb__text"));
-            if (itemElements.length === 0) {
-                return;
-            }
-            let jump = false;
-            while (this.element.scrollHeight > 30 && !jump && itemElements.length > 1) {
-                itemElements.find((item, index) => {
-                    if (index > 0) {
-                        if (!item.classList.contains("protyle-breadcrumb__text--ellipsis")) {
-                            item.classList.add("protyle-breadcrumb__text--ellipsis");
-                            return true;
-                        }
-                        if (index === itemElements.length - 1 && item.classList.contains("protyle-breadcrumb__text--ellipsis")) {
-                            jump = true;
-                        }
-                    }
-                });
-            }
-            this.element.classList.add("protyle-breadcrumb__bar--nowrap");
-            if (this.element.lastElementChild) {
-                this.element.scrollLeft = (this.element.lastElementChild as HTMLElement).offsetLeft - this.element.clientWidth + 14;
-            }
+            improveBreadcrumbAppearance(this.element.parentElement);
         });
         /// #endif
     }

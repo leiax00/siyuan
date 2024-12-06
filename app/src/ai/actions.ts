@@ -9,7 +9,7 @@ import {processRender} from "../protyle/util/processCode";
 import {highlightRender} from "../protyle/render/highlightRender";
 import {Constants} from "../constants";
 import {setStorageVal} from "../protyle/util/compatibility";
-import {escapeAriaLabel, escapeHtml} from "../util/escape";
+import {escapeAriaLabel, escapeAttr, escapeHtml} from "../util/escape";
 import {showMessage} from "../dialog/message";
 import {Menu} from "../plugin/Menu";
 import {upDownHint} from "../util/upDownHint";
@@ -35,7 +35,7 @@ const editDialog = (customName: string, customMemo: string) => {
     <textarea class="b3-text-field fn__block" placeholder="${window.siyuan.languages.aiCustomAction}"></textarea>
 </div>
 <div class="b3-dialog__action">
-    <button class="b3-button b3-button--error">${window.siyuan.languages.delete}</button><div class="fn__space"></div>
+    <button class="b3-button b3-button--remove">${window.siyuan.languages.delete}</button><div class="fn__space"></div>
     <button class="b3-button b3-button--cancel">${window.siyuan.languages.cancel}</button><div class="fn__space"></div>
     <button class="b3-button b3-button--text">${window.siyuan.languages.confirm}</button>
 </div>`,
@@ -166,7 +166,7 @@ export const AIActions = (elements: Element[], protyle: IProtyle) => {
     });
     let customHTML = "";
     window.siyuan.storage[Constants.LOCAL_AI].forEach((item: { name: string, memo: string }, index: number) => {
-        customHTML += `<div data-action="${item.memo || item.name}" data-index="${index}" class="b3-list-item b3-list-item--narrow ariaLabel" aria-label="${escapeAriaLabel(item.memo)}">
+        customHTML += `<div data-action="${escapeAttr(item.memo || item.name)}" data-index="${index}" class="b3-list-item b3-list-item--narrow ariaLabel" aria-label="${escapeAriaLabel(item.memo)}">
     <span class="b3-list-item__text">${escapeHtml(item.name)}</span>
     <span data-type="edit" class="b3-list-item__action"><svg><use xlink:href="#iconEdit"></use></svg></span>
 </div>`;

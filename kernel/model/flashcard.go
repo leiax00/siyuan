@@ -96,7 +96,7 @@ func SetFlashcardsDueTime(cardDues []*SetFlashcardDueTime) (err error) {
 			continue
 		}
 
-		due, parseErr := time.Parse("20060102150405", cardDue.Due)
+		due, parseErr := time.ParseInLocation("20060102150405", cardDue.Due, time.Local)
 		if nil != parseErr {
 			logging.LogErrorf("parse due time [%s] failed: %s", cardDue.Due, err)
 			err = parseErr
@@ -202,7 +202,7 @@ func resetFlashcards(deckID string, blockIDs []string) {
 	}
 
 	PerformTransactions(&transactions)
-	WaitForWritingFiles()
+	FlushTxQueue()
 }
 
 func GetFlashcardNotebooks() (ret []*Box) {
@@ -598,7 +598,7 @@ func GetTreeDueFlashcards(rootID string, reviewedCardIDs []string) (ret []*Flash
 	newCardLimit := Conf.Flashcard.NewCardLimit
 	reviewCardLimit := Conf.Flashcard.ReviewCardLimit
 	// 文档级新卡/复习卡上限控制 Document-level new card/review card limit control https://github.com/siyuan-note/siyuan/issues/9365
-	ial := GetBlockAttrs(rootID)
+	ial := sql.GetBlockAttrs(rootID)
 	if newCardLimitStr := ial["custom-riff-new-card-limit"]; "" != newCardLimitStr {
 		var convertErr error
 		newCardLimit, convertErr = strconv.Atoi(newCardLimitStr)

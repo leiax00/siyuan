@@ -13,19 +13,9 @@ import {Constants} from "../../constants";
 import * as dayjs from "dayjs";
 import {net2LocalAssets} from "../breadcrumb/action";
 import {processClonePHElement} from "../render/util";
+import {copyTextByType} from "../toolbar/util";
 
 export const commonHotkey = (protyle: IProtyle, event: KeyboardEvent, nodeElement?: HTMLElement) => {
-    if (matchHotKey(window.siyuan.config.keymap.editor.general.copyHPath.custom, event)) {
-        fetchPost("/api/filetree/getHPathByID", {
-            id: protyle.block.rootID
-        }, (response) => {
-            writeText(response.data);
-        });
-        event.preventDefault();
-        event.stopPropagation();
-        return true;
-    }
-
     if (matchHotKey(window.siyuan.config.keymap.editor.general.netImg2LocalAsset.custom, event)) {
         net2LocalAssets(protyle, "Img");
         event.preventDefault();
@@ -48,12 +38,71 @@ export const commonHotkey = (protyle: IProtyle, event: KeyboardEvent, nodeElemen
         event.stopPropagation();
         return true;
     }
+    if (matchHotKey(window.siyuan.config.keymap.editor.general.copyHPath.custom, event)) {
+        fetchPost("/api/filetree/getHPathByID", {
+            id: protyle.block.rootID
+        }, (response) => {
+            writeText(response.data);
+        });
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
 
     if (matchHotKey(window.siyuan.config.keymap.editor.general.copyProtocolInMd.custom, event)) {
-        const id = nodeElement ? nodeElement.getAttribute("data-node-id") : protyle.block.rootID;
-        fetchPost("/api/block/getRefText", {id}, (response) => {
-            writeText(`[${response.data}](siyuan://blocks/${id})`);
-        });
+        if (nodeElement) {
+            const selectElements = Array.from(protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select"));
+            if (selectElements.length === 0) {
+                selectElements.push(nodeElement);
+            }
+            copyTextByType(selectElements.map(item => item.getAttribute("data-node-id")), "protocolMd");
+        } else {
+            copyTextByType([protyle.block.rootID], "protocolMd");
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
+    if (matchHotKey(window.siyuan.config.keymap.editor.general.copyID.custom, event)) {
+        if (nodeElement) {
+            const selectElements = Array.from(protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select"));
+            if (selectElements.length === 0) {
+                selectElements.push(nodeElement);
+            }
+            copyTextByType(selectElements.map(item => item.getAttribute("data-node-id")), "id");
+        } else {
+            copyTextByType([protyle.block.rootID], "id");
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+    if (matchHotKey(window.siyuan.config.keymap.editor.general.copyProtocol.custom, event)) {
+        if (nodeElement) {
+            const selectElements = Array.from(protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select"));
+            if (selectElements.length === 0) {
+                selectElements.push(nodeElement);
+            }
+            copyTextByType(selectElements.map(item => item.getAttribute("data-node-id")), "protocol");
+        } else {
+            copyTextByType([protyle.block.rootID], "protocol");
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
+    if (matchHotKey(window.siyuan.config.keymap.editor.general.copyBlockEmbed.custom, event)) {
+        if (nodeElement) {
+            const selectElements = Array.from(protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select"));
+            if (selectElements.length === 0) {
+                selectElements.push(nodeElement);
+            }
+            copyTextByType(selectElements.map(item => item.getAttribute("data-node-id")), "blockEmbed");
+        } else {
+            copyTextByType([protyle.block.rootID], "blockEmbed");
+        }
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -104,10 +153,7 @@ export const upSelect = (options: {
                 // 当第一行太长自然换行的情况
                 options.range.getBoundingClientRect().top - nodeEditableElement.getBoundingClientRect().top - parseInt(getComputedStyle(nodeEditableElement).paddingTop) < 14) {
                 setFirstNodeRange(nodeEditableElement, options.range);
-                if (!isMac()) {
-                    // windows 中 shift 向上选中三行后，最后的光标会乱跳
-                    options.event.preventDefault();
-                }
+                options.event.preventDefault();
             }
             return;
         }
@@ -323,9 +369,7 @@ export const alignImgCenter = (protyle: IProtyle, nodeElement: Element, assetEle
 export const alignImgLeft = (protyle: IProtyle, nodeElement: Element, assetElements: Element[], id: string, html: string) => {
     nodeElement.setAttribute("updated", dayjs().format("YYYYMMDDHHmmss"));
     assetElements.forEach((item: HTMLElement) => {
-        item.style.minWidth = "";
-        // 兼容历史居中问题
-        item.style.display = "";
+        item.removeAttribute("style");
     });
     updateTransaction(protyle, id, nodeElement.outerHTML, html);
 };

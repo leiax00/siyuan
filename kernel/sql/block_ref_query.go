@@ -389,26 +389,17 @@ func QueryRefsRecent(onlyDoc bool, typeFilter string, ignoreLines []string) (ret
 }
 
 func QueryRefsByDefID(defBlockID string, containChildren bool) (ret []*Ref) {
-	sqlBlock := GetBlock(defBlockID)
-	if nil == sqlBlock {
-		return
-	}
-
 	var rows *sql.Rows
 	var err error
-	if "d" == sqlBlock.Type {
-		rows, err = query("SELECT * FROM refs WHERE def_block_root_id = ?", defBlockID)
-	} else {
-		if containChildren {
-			blockIDs := queryBlockChildrenIDs(defBlockID)
-			var params []string
-			for _, id := range blockIDs {
-				params = append(params, "\""+id+"\"")
-			}
-			rows, err = query("SELECT * FROM refs WHERE def_block_id IN (" + strings.Join(params, ",") + ")")
-		} else {
-			rows, err = query("SELECT * FROM refs WHERE def_block_id = ?", defBlockID)
+	if containChildren {
+		blockIDs := queryBlockChildrenIDs(defBlockID)
+		var params []string
+		for _, id := range blockIDs {
+			params = append(params, "\""+id+"\"")
 		}
+		rows, err = query("SELECT * FROM refs WHERE def_block_id IN (" + strings.Join(params, ",") + ")")
+	} else {
+		rows, err = query("SELECT * FROM refs WHERE def_block_id = ?", defBlockID)
 	}
 	if err != nil {
 		logging.LogErrorf("sql query failed: %s", err)
@@ -437,7 +428,7 @@ func QueryRefsByDefIDRefID(defBlockID, refBlockID string) (ret []*Ref) {
 	return
 }
 
-func DefRefs(condition string) (ret []map[*Block]*Block) {
+func DefRefs(condition string, limit int) (ret []map[*Block]*Block) {
 	ret = []map[*Block]*Block{}
 	stmt := "SELECT ref.*, r.block_id || '@' || r.def_block_id AS rel FROM blocks AS ref, refs AS r WHERE ref.id = r.block_id"
 	if "" != condition {
@@ -462,7 +453,7 @@ func DefRefs(condition string) (ret []map[*Block]*Block) {
 		refs[rel] = &ref
 	}
 
-	rows, err = query("SELECT def.* FROM blocks AS def, refs AS r WHERE def.id = r.def_block_id")
+	rows, err = query("SELECT def.* FROM blocks AS def, refs AS r WHERE def.id = r.def_block_id LIMIT ?", limit)
 	if err != nil {
 		logging.LogErrorf("sql query failed: %s", err)
 		return

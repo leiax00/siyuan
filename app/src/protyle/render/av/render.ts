@@ -1,15 +1,16 @@
 import {fetchPost} from "../../../util/fetch";
 import {getColIconByType} from "./col";
 import {Constants} from "../../../constants";
-import {addDragFill, renderCell} from "./cell";
+import {addDragFill, cellScrollIntoView, renderCell} from "./cell";
 import {unicode2Emoji} from "../../../emoji";
 import {focusBlock} from "../../util/selection";
-import {hasClosestBlock, hasClosestByClassName, isInEmbedBlock} from "../../util/hasClosest";
+import {hasClosestBlock, hasClosestByAttribute, hasClosestByClassName} from "../../util/hasClosest";
 import {stickyRow, updateHeader} from "./row";
 import {getCalcValue} from "./calc";
 import {renderAVAttribute} from "./blockAttr";
 import {showMessage} from "../../../dialog/message";
 import {addClearButton} from "../../../util/addClearButton";
+import {escapeAriaLabel, escapeAttr, escapeHtml} from "../../../util/escape";
 
 export const avRender = (element: Element, protyle: IProtyle, cb?: () => void, viewID?: string) => {
     let avElements: Element[] = [];
@@ -70,6 +71,10 @@ export const avRender = (element: Element, protyle: IProtyle, cb?: () => void, v
             const snapshot = protyle.options.history?.snapshot;
             let newViewID = e.getAttribute(Constants.CUSTOM_SY_AV_VIEW) || "";
             if (typeof viewID === "string") {
+                const viewTabElement = e.querySelector(`.av__views > .layout-tab-bar > .item[data-id="${viewID}"]`) as HTMLElement;
+                if (viewTabElement) {
+                    e.dataset.pageSize = viewTabElement.dataset.page;
+                }
                 newViewID = viewID;
                 fetchPost("/api/av/setDatabaseBlockView", {id: e.dataset.nodeId, viewID});
                 e.setAttribute(Constants.CUSTOM_SY_AV_VIEW, newViewID);
@@ -90,7 +95,7 @@ export const avRender = (element: Element, protyle: IProtyle, cb?: () => void, v
                     e.dataset.pageSize = data.pageSize.toString();
                 }
                 // header
-                let tableHTML = '<div class="av__row av__row--header"><div class="av__firstcol av__colsticky"><svg><use xlink:href="#iconUncheck"></use></svg></div>';
+                let tableHTML = '<div class="av__row av__row--header"><div class="av__colsticky"><div class="av__firstcol"><svg><use xlink:href="#iconUncheck"></use></svg></div></div>';
                 let calcHTML = "";
                 let pinIndex = -1;
                 let pinMaxIndex = -1;
@@ -126,11 +131,13 @@ export const avRender = (element: Element, protyle: IProtyle, cb?: () => void, v
                     if (column.hidden) {
                         return;
                     }
-                    tableHTML += `<div class="av__cell av__cell--header" data-col-id="${column.id}"  draggable="true" 
+                    tableHTML += `<div class="av__cell av__cell--header ariaLabel" data-col-id="${column.id}"  draggable="true" 
 data-icon="${column.icon}" data-dtype="${column.type}" data-wrap="${column.wrap}" data-pin="${column.pin}" 
+data-desc="${escapeAttr(column.desc)}" data-position="top"
+aria-label="${escapeAriaLabel(column.name)}<div class='ft__on-surface'>${escapeAriaLabel(column.desc || "")}</div>"
 style="width: ${column.width || "200px"};">
     ${column.icon ? unicode2Emoji(column.icon, "av__cellheadericon", true) : `<svg class="av__cellheadericon"><use xlink:href="#${getColIconByType(column.type)}"></use></svg>`}
-    <span class="av__celltext fn__flex-1">${column.name}</span>
+    <span class="av__celltext fn__flex-1">${escapeHtml(column.name)}</span>
     ${column.pin ? '<svg class="av__cellheadericon av__cellheadericon--pin"><use xlink:href="#iconPin"></use></svg>' : ""}
     <div class="av__widthdrag"></div>
 </div>`;
@@ -165,7 +172,7 @@ style="width: ${column.width || "200px"}">${getCalcValue(column) || '<svg><use x
                     if (pinIndex > -1) {
                         tableHTML += '<div class="av__colsticky"><div class="av__firstcol"><svg><use xlink:href="#iconUncheck"></use></svg></div>';
                     } else {
-                        tableHTML += '<div class="av__firstcol av__colsticky"><svg><use xlink:href="#iconUncheck"></use></svg></div>';
+                        tableHTML += '<div class="av__colsticky"><div class="av__firstcol"><svg><use xlink:href="#iconUncheck"></use></svg></div></div>';
                     }
 
                     row.cells.forEach((cell, index) => {
@@ -195,21 +202,15 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                 let tabHTML = "";
                 let viewData: IAVView;
                 response.data.views.forEach((item: IAVView) => {
-                    tabHTML += `<div data-id="${item.id}" class="item${item.id === response.data.viewID ? " item--focus" : ""}">
+                    tabHTML += `<div data-position="top" data-id="${item.id}" data-page="${item.pageSize}" aria-label="${escapeAriaLabel(item.name)}<div class='ft__on-surface'>${escapeAriaLabel(item.desc || "")}</div>" class="ariaLabel item${item.id === response.data.viewID ? " item--focus" : ""}">
     ${item.icon ? unicode2Emoji(item.icon, "item__graphic", true) : '<svg class="item__graphic"><use xlink:href="#iconTable"></use></svg>'}
-    <span class="item__text">${item.name}</span>
+    <span class="item__text">${escapeHtml(item.name)}</span>
 </div>`;
                     if (item.id === response.data.viewID) {
                         viewData = item;
                     }
                 });
-                let avBackground = "--av-background:var(--b3-theme-background)";
-                if (e.style.backgroundColor) {
-                    avBackground = "--av-background:" + e.style.backgroundColor;
-                } else if (isInEmbedBlock(e)) {
-                    avBackground = "--av-background:var(--b3-theme-surface)";
-                }
-                e.firstElementChild.outerHTML = `<div class="av__container" style="${avBackground}">
+                e.firstElementChild.outerHTML = `<div class="av__container">
     <div class="av__header">
         <div class="fn__flex av__views${isSearching || query ? " av__views--show" : ""}">
             <div class="layout-tab-bar fn__flex">
@@ -253,7 +254,7 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
             ${response.data.isMirror ? ` <span data-av-id="${response.data.id}" data-popover-url="/api/av/getMirrorDatabaseBlocks" class="popover__block block__icon block__icon--show ariaLabel" data-position="8bottom" aria-label="${window.siyuan.languages.mirrorTip}">
     <svg><use xlink:href="#iconSplitLR"></use></svg></span><div class="fn__space"></div>` : ""}
         </div>
-        <div contenteditable="${protyle.disabled ? "false" : "true"}" spellcheck="${window.siyuan.config.editor.spellcheck.toString()}" class="av__title${viewData.hideAttrViewName ? " fn__none" : ""}" data-title="${response.data.name || ""}" data-tip="${window.siyuan.languages.title}">${response.data.name || ""}</div>
+        <div contenteditable="${protyle.disabled || hasClosestByAttribute(e, "data-type", "NodeBlockQueryEmbed") ? "false" : "true"}" spellcheck="${window.siyuan.config.editor.spellcheck.toString()}" class="av__title${viewData.hideAttrViewName ? " fn__none" : ""}" data-title="${response.data.name || ""}" data-tip="${window.siyuan.languages.title}">${response.data.name || ""}</div>
         <div class="av__counter fn__none"></div>
     </div>
     <div class="av__scroll">
@@ -263,14 +264,12 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                 <div class="av__colsticky">
                     <button class="b3-button" data-type="av-add-bottom">
                         <svg><use xlink:href="#iconAdd"></use></svg>
-                        ${window.siyuan.languages.addAttr}
+                        <span>${window.siyuan.languages.newRow}</span>
                     </button>
                     <span class="fn__space"></span>
-                    <button class="b3-button${data.rowCount > data.rows.length ? "" : " fn__none"}">
-                        <svg data-type="av-load-more"><use xlink:href="#iconArrowDown"></use></svg>
-                        <span data-type="av-load-more">
-                            ${window.siyuan.languages.loadMore}
-                        </span>
+                    <button class="b3-button${data.rowCount > data.rows.length ? "" : " fn__none"}" data-type="av-load-more">
+                        <svg><use xlink:href="#iconArrowDown"></use></svg>
+                        <span>${window.siyuan.languages.loadMore}</span>
                         <svg data-type="set-page-size" data-size="${data.pageSize}"><use xlink:href="#iconMore"></use></svg>
                     </button>
                 </div>
@@ -311,13 +310,13 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                     } else if (!document.querySelector(".av__panel") && !isSearching) {
                         focusBlock(e);
                     }
+                    cellScrollIntoView(e, newCellElement);
                 }
                 selectRowIds.forEach((selectRowId, index) => {
                     const rowElement = e.querySelector(`.av__row[data-id="${selectRowId}"]`) as HTMLElement;
                     if (rowElement) {
                         rowElement.classList.add("av__row--select");
                         rowElement.querySelector(".av__firstcol use").setAttribute("xlink:href", "#iconCheck");
-
                     }
 
                     if (index === selectRowIds.length - 1 && rowElement) {
@@ -355,7 +354,7 @@ ${cell.color ? `color:${cell.color};` : ""}">${renderCell(cell.value, rowIndex)}
                     if (event.isComposing) {
                         return;
                     }
-                    if (searchInputElement.value) {
+                    if (searchInputElement.value || document.activeElement.isSameNode(searchInputElement)) {
                         viewsElement.classList.add("av__views--show");
                     } else {
                         viewsElement.classList.remove("av__views--show");
@@ -433,7 +432,9 @@ export const refreshAV = (protyle: IProtyle, operation: IOperation) => {
                 });
             });
         } else {
-            Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-av-id="${operation.avID}"]`)).forEach((item: HTMLElement) => {
+            // 修改表格名 avID 传入到 id 上了 https://github.com/siyuan-note/siyuan/issues/12724
+            const avID = operation.action === "setAttrViewName" ? operation.id : operation.avID;
+            Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-av-id="${avID}"]`)).forEach((item: HTMLElement) => {
                 item.removeAttribute("data-render");
                 const updateRow = item.querySelector('.av__row[data-need-update="true"]');
                 if (operation.action === "sortAttrViewCol" || operation.action === "sortAttrViewRow") {
@@ -444,7 +445,7 @@ export const refreshAV = (protyle: IProtyle, operation: IOperation) => {
                     addDragFill(item.querySelector(".av__cell--select"));
                 }
                 avRender(item, protyle, () => {
-                    const attrElement = document.querySelector(`.b3-dialog--open[data-key="${Constants.DIALOG_ATTR}"] div[data-av-id="${operation.avID}"]`) as HTMLElement;
+                    const attrElement = document.querySelector(`.b3-dialog--open[data-key="${Constants.DIALOG_ATTR}"] div[data-av-id="${avID}"]`) as HTMLElement;
                     if (attrElement) {
                         // 更新属性面板
                         renderAVAttribute(attrElement.parentElement, attrElement.dataset.nodeId, protyle);

@@ -29,6 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/siyuan/kernel/model"
+	"github.com/siyuan-note/siyuan/kernel/sql"
 	"github.com/siyuan-note/siyuan/kernel/util"
 )
 
@@ -128,6 +129,14 @@ func setImageOCRText(c *gin.Context) {
 	path := arg["path"].(string)
 	text := arg["text"].(string)
 	util.SetAssetText(path, text)
+
+	// 刷新 OCR 结果到数据库
+	util.NodeOCRQueueLock.Lock()
+	defer util.NodeOCRQueueLock.Unlock()
+	for _, id := range util.NodeOCRQueue {
+		sql.IndexNodeQueue(id)
+	}
+	util.NodeOCRQueue = nil
 }
 
 func ocr(c *gin.Context) {
@@ -293,6 +302,15 @@ func getUnusedAssets(c *gin.Context) {
 	defer c.JSON(http.StatusOK, ret)
 
 	unusedAssets := model.UnusedAssets()
+	total := len(unusedAssets)
+
+	// List only 512 unreferenced assets https://github.com/siyuan-note/siyuan/issues/13075
+	const maxUnusedAssets = 512
+	if total > maxUnusedAssets {
+		unusedAssets = unusedAssets[:maxUnusedAssets]
+		util.PushMsg(fmt.Sprintf(model.Conf.Language(251), total, maxUnusedAssets), 5000)
+	}
+
 	ret.Data = map[string]interface{}{
 		"unusedAssets": unusedAssets,
 	}

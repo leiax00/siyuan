@@ -123,6 +123,12 @@ func extensionCopy(c *gin.Context) {
 	}
 
 	luteEngine := util.NewLute()
+	luteEngine.SetSup(true)
+	luteEngine.SetSub(true)
+	luteEngine.SetMark(true)
+	luteEngine.SetGFMStrikethrough(true)
+	luteEngine.SetInlineAsterisk(true)
+	luteEngine.SetInlineUnderscore(true)
 	var md string
 	var withMath bool
 	if nil != form.Value["href"] {
@@ -143,28 +149,52 @@ func extensionCopy(c *gin.Context) {
 				}
 
 				md = string(bodyData)
+				luteEngine.SetIndentCodeBlock(true) // 链滴支持缩进代码块，因此需要开启
 				tree := parse.Parse("", []byte(md), luteEngine.ParseOptions)
 				ast.Walk(tree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {
 					if ast.NodeInlineMath == n.Type {
 						withMath = true
 						return ast.WalkStop
+					} else if ast.NodeCodeBlock == n.Type {
+						if !n.IsFencedCodeBlock {
+							// 将缩进代码块转换为围栏代码块
+							n.IsFencedCodeBlock = true
+							n.CodeBlockFenceChar = '`'
+							n.PrependChild(&ast.Node{Type: ast.NodeCodeBlockFenceInfoMarker})
+							n.PrependChild(&ast.Node{Type: ast.NodeCodeBlockFenceOpenMarker, Tokens: []byte("```"), CodeBlockFenceLen: 3})
+							n.LastChild.InsertAfter(&ast.Node{Type: ast.NodeCodeBlockFenceCloseMarker, Tokens: []byte("```"), CodeBlockFenceLen: 3})
+							code := n.ChildByType(ast.NodeCodeBlockCode)
+							if nil != code {
+								code.Tokens = bytes.TrimPrefix(code.Tokens, []byte("    "))
+								code.Tokens = bytes.ReplaceAll(code.Tokens, []byte("\n    "), []byte("\n"))
+								code.Tokens = bytes.TrimPrefix(code.Tokens, []byte("\t"))
+								code.Tokens = bytes.ReplaceAll(code.Tokens, []byte("\n\t"), []byte("\n"))
+							}
+						}
 					}
 					return ast.WalkContinue
 				})
+
+				md, _ = lute.FormatNodeSync(tree.Root, luteEngine.ParseOptions, luteEngine.RenderOptions)
 			}
 		}
 	}
 
+	var tree *parse.Tree
 	if "" == md {
-		md, withMath, _ = model.HTML2Markdown(dom)
+		tree, withMath = model.HTML2Tree(dom, luteEngine)
+		if nil == tree {
+			md, withMath, _ = model.HTML2Markdown(dom, luteEngine)
+			if withMath {
+				luteEngine.SetInlineMath(true)
+			}
+			tree = parse.Parse("", []byte(md), luteEngine.ParseOptions)
+		}
+	} else {
+		tree = parse.Parse("", []byte(md), luteEngine.ParseOptions)
 	}
 
-	md = strings.TrimSpace(md)
-	if withMath {
-		luteEngine.SetInlineMath(true)
-	}
 	var unlinks []*ast.Node
-	tree := parse.Parse("", []byte(md), luteEngine.ParseOptions)
 	ast.Walk(tree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {
 		if !entering {
 			return ast.WalkContinue
@@ -192,6 +222,7 @@ func extensionCopy(c *gin.Context) {
 		unlink.Unlink()
 	}
 
+	parse.TextMarks2Inlines(tree) // 先将 TextMark 转换为 Inlines https://github.com/siyuan-note/siyuan/issues/13056
 	parse.NestedInlines2FlattedSpansHybrid(tree, false)
 
 	md, _ = lute.FormatNodeSync(tree.Root, luteEngine.ParseOptions, luteEngine.RenderOptions)

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -37,6 +38,13 @@ import (
 	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
 )
+
+var DisabledFeatures []string
+
+func DisableFeature(feature string) {
+	DisabledFeatures = append(DisabledFeatures, feature)
+	DisabledFeatures = gulu.Str.RemoveDuplicatedElem(DisabledFeatures)
+}
 
 // UseSingleLineSave 是否使用单行保存 .sy 和数据库 .json 文件。
 var UseSingleLineSave = true
@@ -88,6 +96,9 @@ func logBootInfo() {
 		"    * database [ver=%s]\n"+
 		"    * workspace directory [%s]",
 		Ver, runtime.GOARCH, plat, os.Getpid(), Mode, WorkingDir, ReadOnly, Container, DatabaseVer, WorkspaceDir)
+	if 0 < len(DisabledFeatures) {
+		logging.LogInfof("disabled features [%s]", strings.Join(DisabledFeatures, ", "))
+	}
 }
 
 func RandomSleep(minMills, maxMills int) {
@@ -132,9 +143,6 @@ func SetNetworkProxy(proxyURL string) {
 }
 
 const (
-	// FrontendQueueInterval 为前端请求队列轮询间隔。
-	FrontendQueueInterval = 512 * time.Millisecond
-
 	// SQLFlushInterval 为数据库事务队列写入间隔。
 	SQLFlushInterval = 3000 * time.Millisecond
 )
@@ -309,8 +317,8 @@ func isICloudPath(workspaceAbsPath string) (ret bool) {
 
 	// macOS 端对工作空间放置在 iCloud 路径下做检查 https://github.com/siyuan-note/siyuan/issues/7747
 	iCloudRoot := filepath.Join(HomeDir, "Library", "Mobile Documents")
-	WalkWithSymlinks(iCloudRoot, func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() {
+	WalkWithSymlinks(iCloudRoot, func(path string, d fs.DirEntry, err error) error {
+		if !d.IsDir() {
 			return nil
 		}
 

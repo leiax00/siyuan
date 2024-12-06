@@ -164,10 +164,18 @@ func OcrAsset(asset string) (ret []map[string]interface{}) {
 	return
 }
 
-// https://github.com/siyuan-note/siyuan/pull/11708
 func GetAssetText(asset string) (ret string) {
+	assetsTextsLock.Lock()
 	ret = assetsTexts[asset]
+	assetsTextsLock.Unlock()
 	return
+}
+
+func RemoveAssetText(asset string) {
+	assetsTextsLock.Lock()
+	delete(assetsTexts, asset)
+	assetsTextsLock.Unlock()
+	assetsTextsChanged.Store(true)
 }
 
 func IsTesseractExtractable(p string) bool {
@@ -219,9 +227,11 @@ func Tesseract(imgAbsPath string) (ret []map[string]interface{}) {
 	}
 
 	tsv := string(output)
+	//logging.LogInfof("tesseract [path=%s] success [%s]", imgAbsPath, tsv)
 
 	// 按行分割 TSV 数据
-	lines := strings.Split(tsv, "\r\n")
+	tsv = strings.ReplaceAll(tsv, "\r", "")
+	lines := strings.Split(tsv, "\n")
 
 	// 解析 TSV 数据 跳过标题行，从第二行开始处理
 	for _, line := range lines[1:] {
@@ -238,7 +248,7 @@ func Tesseract(imgAbsPath string) (ret []map[string]interface{}) {
 		ret = append(ret, dataMap)
 	}
 
-	tsv = gulu.Str.RemoveInvisible(tsv)
+	tsv = RemoveInvalid(tsv)
 	tsv = RemoveRedundantSpace(tsv)
 	msg := fmt.Sprintf("OCR [%s] [%s]", html.EscapeString(info.Name()), html.EscapeString(GetOcrJsonText(ret)))
 	PushStatusBar(msg)
@@ -252,11 +262,11 @@ func GetOcrJsonText(jsonData []map[string]interface{}) (ret string) {
 		if text, ok := dataMap["text"]; ok {
 			// 确保 text 是字符串类型
 			if textStr, ok := text.(string); ok {
-				ret += " " + textStr
+				ret += " " + strings.ReplaceAll(textStr, "\r", "")
 			}
 		}
 	}
-	ret = gulu.Str.RemoveInvisible(ret)
+	ret = RemoveInvalid(ret)
 	ret = RemoveRedundantSpace(ret)
 	return ret
 }

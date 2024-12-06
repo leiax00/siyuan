@@ -23,12 +23,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/88250/lute"
 	"github.com/88250/lute/parse"
 	"github.com/88250/lute/render"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/panjf2000/ants/v2"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/cache"
@@ -37,20 +40,34 @@ import (
 )
 
 func LoadTrees(ids []string) (ret map[string]*parse.Tree) {
-	ret, tmpCache := map[string]*parse.Tree{}, map[string]*parse.Tree{}
+	ret = map[string]*parse.Tree{}
 	bts := treenode.GetBlockTrees(ids)
 	luteEngine := util.NewLute()
-	for id, bt := range bts {
-		tree := tmpCache[bt.RootID]
-		if nil == tree {
-			tree, _ = LoadTree(bt.BoxID, bt.Path, luteEngine)
-			if nil == tree {
-				logging.LogWarnf("load tree [%s] failed: %s", id, bt.Path)
-				continue
-			}
-			tmpCache[bt.RootID] = tree
+	var boxIDs []string
+	var paths []string
+	blockIDs := map[string][]string{}
+	for _, bt := range bts {
+		boxIDs = append(boxIDs, bt.BoxID)
+		paths = append(paths, bt.Path)
+		if _, ok := blockIDs[bt.RootID]; !ok {
+			blockIDs[bt.RootID] = []string{}
 		}
-		ret[id] = tree
+		blockIDs[bt.RootID] = append(blockIDs[bt.RootID], bt.ID)
+	}
+
+	trees, errs := batchLoadTrees(boxIDs, paths, luteEngine)
+	for i := range trees {
+		tree := trees[i]
+		err := errs[i]
+		if err != nil || tree == nil {
+			logging.LogErrorf("load tree failed: %s", err)
+			continue
+		}
+
+		bIDs := blockIDs[tree.Root.ID]
+		for _, bID := range bIDs {
+			ret[bID] = tree
+		}
 	}
 	return
 }
@@ -64,6 +81,41 @@ func LoadTree(boxID, p string, luteEngine *lute.Lute) (ret *parse.Tree, err erro
 	}
 
 	ret, err = LoadTreeByData(data, boxID, p, luteEngine)
+	return
+}
+
+func batchLoadTrees(boxIDs, paths []string, luteEngine *lute.Lute) (ret []*parse.Tree, errs []error) {
+	waitGroup := sync.WaitGroup{}
+	lock := sync.Mutex{}
+	poolSize := runtime.NumCPU()
+	if 8 < poolSize {
+		poolSize = 8
+	}
+	p, _ := ants.NewPoolWithFunc(poolSize, func(arg interface{}) {
+		defer waitGroup.Done()
+
+		i := arg.(int)
+		boxID := boxIDs[i]
+		path := paths[i]
+		tree, err := LoadTree(boxID, path, luteEngine)
+		lock.Lock()
+		ret = append(ret, tree)
+		errs = append(errs, err)
+		lock.Unlock()
+	})
+	loaded := map[string]bool{}
+	for i := range paths {
+		if loaded[boxIDs[i]+paths[i]] {
+			continue
+		}
+
+		loaded[boxIDs[i]+paths[i]] = true
+
+		waitGroup.Add(1)
+		p.Invoke(i)
+	}
+	waitGroup.Wait()
+	p.Release()
 	return
 }
 
@@ -98,33 +150,26 @@ func LoadTreeByData(data []byte, boxID, p string, luteEngine *lute.Lute) (ret *p
 		parentAbsPath += ".sy"
 		parentPath := parentAbsPath
 		parentAbsPath = filepath.Join(util.DataDir, boxID, parentAbsPath)
-		parentData, readErr := filelock.ReadFile(parentAbsPath)
-		if nil != readErr {
-			if os.IsNotExist(readErr) {
-				// 子文档缺失父文档时自动补全 https://github.com/siyuan-note/siyuan/issues/7376
-				parentTree := treenode.NewTree(boxID, parentPath, hPathBuilder.String()+"Untitled", "Untitled")
-				if writeErr := WriteTree(parentTree); nil != writeErr {
-					logging.LogErrorf("rebuild parent tree [%s] failed: %s", parentAbsPath, writeErr)
-				} else {
-					logging.LogInfof("rebuilt parent tree [%s]", parentAbsPath)
-					treenode.UpsertBlockTree(parentTree)
-				}
+
+		parentDocIAL := DocIAL(parentAbsPath)
+		if 1 > len(parentDocIAL) {
+			// 子文档缺失父文档时自动补全 https://github.com/siyuan-note/siyuan/issues/7376
+			parentTree := treenode.NewTree(boxID, parentPath, hPathBuilder.String()+"Untitled", "Untitled")
+			if _, writeErr := WriteTree(parentTree); nil != writeErr {
+				logging.LogErrorf("rebuild parent tree [%s] failed: %s", parentAbsPath, writeErr)
 			} else {
-				logging.LogWarnf("read parent tree data [%s] failed: %s", parentAbsPath, readErr)
+				logging.LogInfof("rebuilt parent tree [%s]", parentAbsPath)
+				treenode.UpsertBlockTree(parentTree)
 			}
 			hPathBuilder.WriteString("Untitled/")
 			continue
 		}
 
-		ial := ReadDocIAL(parentData)
-		if 1 > len(ial) {
-			logging.LogWarnf("tree [%s] is corrupted", filepath.Join(boxID, p))
-		}
-		title := ial["title"]
+		title := parentDocIAL["title"]
 		if "" == title {
 			title = "Untitled"
 		}
-		hPathBuilder.WriteString(title)
+		hPathBuilder.WriteString(util.UnescapeHTML(title))
 		hPathBuilder.WriteString("/")
 	}
 	hPathBuilder.WriteString(ret.Root.IALAttr("title"))
@@ -133,16 +178,41 @@ func LoadTreeByData(data []byte, boxID, p string, luteEngine *lute.Lute) (ret *p
 	return
 }
 
-func WriteTree(tree *parse.Tree) (err error) {
+func DocIAL(absPath string) (ret map[string]string) {
+	filelock.Lock(absPath)
+	file, err := os.Open(absPath)
+	if err != nil {
+		logging.LogErrorf("open file [%s] failed: %s", absPath, err)
+		filelock.Unlock(absPath)
+		return nil
+	}
+
+	iter := jsoniter.Parse(jsoniter.ConfigCompatibleWithStandardLibrary, file, 512)
+	for field := iter.ReadObject(); field != ""; field = iter.ReadObject() {
+		if field == "Properties" {
+			iter.ReadVal(&ret)
+			break
+		} else {
+			iter.Skip()
+		}
+	}
+	file.Close()
+	filelock.Unlock(absPath)
+	return
+}
+
+func WriteTree(tree *parse.Tree) (size uint64, err error) {
 	data, filePath, err := prepareWriteTree(tree)
 	if err != nil {
 		return
 	}
 
+	size = uint64(len(data))
 	if err = filelock.WriteFile(filePath, data); err != nil {
 		msg := fmt.Sprintf("write data [%s] failed: %s", filePath, err)
 		logging.LogErrorf(msg)
-		return errors.New(msg)
+		err = errors.New(msg)
+		return
 	}
 
 	afterWriteTree(tree)
@@ -153,7 +223,7 @@ func prepareWriteTree(tree *parse.Tree) (data []byte, filePath string, err error
 	luteEngine := util.NewLute() // 不关注用户的自定义解析渲染选项
 
 	if nil == tree.Root.FirstChild {
-		newP := treenode.NewParagraph()
+		newP := treenode.NewParagraph("")
 		tree.Root.AppendChild(newP)
 		tree.Root.SetIALAttr("updated", util.TimeFromID(newP.ID))
 		treenode.UpsertBlockTree(tree)
@@ -229,15 +299,5 @@ func parseJSON2Tree(boxID, p string, jsonData []byte, luteEngine *lute.Lute) (re
 			logging.LogErrorf(msg)
 		}
 	}
-	return
-}
-
-func ReadDocIAL(data []byte) (ret map[string]string) {
-	ret = map[string]string{}
-	val := jsoniter.Get(data, "Properties")
-	if nil == val || val.ValueType() == jsoniter.InvalidValue {
-		return
-	}
-	val.ToVal(&ret)
 	return
 }

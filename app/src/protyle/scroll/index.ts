@@ -4,7 +4,6 @@ import {fetchPost} from "../../util/fetch";
 import {updateHotkeyTip} from "../util/compatibility";
 import {hasClosestByClassName} from "../util/hasClosest";
 import {goEnd, goHome} from "../wysiwyg/commonHotkey";
-import {isMobile} from "../../util/functions";
 import {showTooltip} from "../../dialog/tooltip";
 
 export class Scroll {
@@ -17,16 +16,13 @@ export class Scroll {
     constructor(protyle: IProtyle) {
         this.parentElement = document.createElement("div");
         this.parentElement.classList.add("protyle-scroll");
-        if (!isMobile()) {
-            this.parentElement.style.right = "10px";
-        }
-        this.parentElement.innerHTML = `<div class="b3-tooltips b3-tooltips__w protyle-scroll__up" aria-label="${updateHotkeyTip("⌘Home")}">
+        this.parentElement.innerHTML = `<div class="protyle-scroll__up ariaLabel" data-position="right4top" aria-label="${updateHotkeyTip("⌘Home")}">
     <svg><use xlink:href="#iconUp"></use></svg>
 </div>
 <div class="fn__none protyle-scroll__bar ariaLabel" data-position="right18bottom" aria-label="Blocks 1/1">
     <input class="b3-slider" type="range" max="1" min="1" step="1" value="1" />
 </div>
-<div class="b3-tooltips b3-tooltips__w protyle-scroll__down" aria-label="${updateHotkeyTip("⌘End")}">
+<div class="protyle-scroll__down ariaLabel" data-position="right4bottom" aria-label="${updateHotkeyTip("⌘End")}">
     <svg><use xlink:href="#iconDown"></use></svg>
 </div>`;
 

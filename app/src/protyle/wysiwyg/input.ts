@@ -5,7 +5,7 @@ import * as dayjs from "dayjs";
 import {transaction, updateTransaction} from "./transaction";
 import {mathRender} from "../render/mathRender";
 import {highlightRender} from "../render/highlightRender";
-import {getContenteditableElement, getNextBlock, hasNextSibling, isNotEditBlock} from "./getBlock";
+import {getContenteditableElement, hasNextSibling, isNotEditBlock} from "./getBlock";
 import {genEmptyBlock} from "../../block/util";
 import {blockRender} from "../render/blockRender";
 import {hideElements} from "../ui/hideElements";
@@ -54,12 +54,24 @@ export const input = async (protyle: IProtyle, blockElement: HTMLElement, range:
     blockElement.setAttribute("updated", dayjs().format("YYYYMMDDHHmmss"));
     const wbrElement: HTMLElement = document.createElement("wbr");
     range.insertNode(wbrElement);
-    if (event && event.inputType === "deleteContentForward") {
+    if (event) {
         const wbrNextElement = hasNextSibling(wbrElement) as HTMLElement;
-        if (wbrNextElement && wbrNextElement.nodeType === 1 && !wbrNextElement.textContent.startsWith(Constants.ZWSP)) {
-            const nextType = (wbrNextElement.getAttribute("data-type") || "").split(" ");
-            if (nextType.includes("code") || nextType.includes("kbd") || nextType.includes("tag")) {
-                wbrNextElement.insertAdjacentElement("afterbegin", wbrElement);
+        if (event.inputType === "deleteContentForward") {
+            if (wbrNextElement && wbrNextElement.nodeType === 1 && !wbrNextElement.textContent.startsWith(Constants.ZWSP)) {
+                const nextType = (wbrNextElement.getAttribute("data-type") || "").split(" ");
+                if (nextType.includes("code") || nextType.includes("kbd") || nextType.includes("tag")) {
+                    wbrNextElement.insertAdjacentElement("afterbegin", wbrElement);
+                }
+            }
+        }
+        // https://github.com/siyuan-note/siyuan/issues/12468
+        if ((event.inputType === "deleteContentBackward" || event.inputType === "deleteContentForward") &&
+            wbrNextElement && wbrNextElement.nodeType === 1 && wbrNextElement.tagName === "BR") {
+            // https://github.com/siyuan-note/siyuan/issues/13190
+            const brNextElement = hasNextSibling(wbrNextElement);
+            if (brNextElement && brNextElement.nodeType === 1 &&
+                (brNextElement as HTMLElement).getAttribute("data-type")?.indexOf("inline-math") > -1) {
+                wbrNextElement.remove();
             }
         }
     }
@@ -104,6 +116,9 @@ export const input = async (protyle: IProtyle, blockElement: HTMLElement, range:
     // https://github.com/siyuan-note/siyuan/issues/9015
     if (trimStartText === "¥¥<wbr>" || trimStartText === "￥￥<wbr>") {
         editElement.innerHTML = "$$<wbr>";
+    } else if (trimStartText.indexOf("\n¥¥<wbr>") > -1 || trimStartText.indexOf("\n￥￥<wbr>") > -1) {
+        // https://ld246.com/article/1730020516427
+        editElement.innerHTML = trimStartText.replace("\n¥¥<wbr>", "\n$$$$<wbr>").replace("\n￥￥<wbr>", "\n$$$$<wbr>");
     }
     const refElement = hasClosestByAttribute(range.startContainer, "data-type", "block-ref");
     if (refElement && refElement.getAttribute("data-subtype") === "d") {
@@ -116,8 +131,9 @@ export const input = async (protyle: IProtyle, blockElement: HTMLElement, range:
     let focusHR = false;
     if (["---", "___", "***"].includes(editElement.textContent) && type !== "NodeCodeBlock") {
         html = `<div data-node-id="${id}" data-type="NodeThematicBreak" class="hr"><div></div></div>`;
-        const nextBlockElement = getNextBlock(editElement);
-        if (nextBlockElement) {
+        // https://github.com/siyuan-note/siyuan/issues/12593
+        const nextBlockElement = blockElement.nextElementSibling;
+        if (nextBlockElement && nextBlockElement.getAttribute("data-node-id")) {
             if (!isNotEditBlock(nextBlockElement)) {
                 focusBlock(nextBlockElement);
             } else {
@@ -146,7 +162,9 @@ export const input = async (protyle: IProtyle, blockElement: HTMLElement, range:
     }
     // 在数学公式输入框中撤销到最后一步，再继续撤销会撤销编辑器正文内容，从而出发 input 事件
     hideElements(["util"], protyle, true);
-
+    if (type === "NodeTable") {
+        blockElement.querySelector(".table__select").removeAttribute("style");
+    }
     const tempElement = document.createElement("template");
     tempElement.innerHTML = html;
     if (needRender && (
@@ -280,6 +298,7 @@ const updateInput = (html: string, protyle: IProtyle, id: string) => {
                 data: protyle.wysiwyg.lastHTMLs[id],
                 action: "update"
             });
+            protyle.wysiwyg.lastHTMLs[id] = item.outerHTML;
         } else {
             let firstElement;
             if (index === 0) {

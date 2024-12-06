@@ -27,27 +27,16 @@ import (
 	"github.com/88250/lute/ast"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/av"
-	"github.com/siyuan-note/siyuan/kernel/cache"
 	"github.com/siyuan-note/siyuan/kernel/treenode"
 	"github.com/siyuan-note/siyuan/kernel/util"
 )
 
-func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query string,
-	GetBlockAttrsWithoutWaitWriting func(id string) (ret map[string]string)) (ret *av.Table) {
-	if nil == GetBlockAttrsWithoutWaitWriting {
-		GetBlockAttrsWithoutWaitWriting = func(id string) (ret map[string]string) {
-			ret = cache.GetBlockIAL(id)
-			if nil == ret {
-				ret = map[string]string{}
-			}
-			return
-		}
-	}
-
+func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query string) (ret *av.Table) {
 	ret = &av.Table{
 		ID:               view.ID,
 		Icon:             view.Icon,
 		Name:             view.Name,
+		Desc:             view.Desc,
 		HideAttrViewName: view.HideAttrViewName,
 		Columns:          []*av.TableColumn{},
 		Rows:             []*av.TableRow{},
@@ -90,6 +79,7 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 			Wrap:         col.Wrap,
 			Hidden:       col.Hidden,
 			Width:        col.Width,
+			Desc:         key.Desc,
 			Pin:          col.Pin,
 			Calc:         col.Calc,
 		})
@@ -188,7 +178,19 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 		ret.Rows = append(ret.Rows, &tableRow)
 	}
 
+	// 批量获取块属性以提升性能
+	var ialIDs []string
+	for _, row := range ret.Rows {
+		block := row.GetBlockValue()
+		if nil != block && !block.IsDetached {
+			ialIDs = append(ialIDs, row.ID)
+		}
+	}
+	ials := BatchGetBlockAttrs(ialIDs)
+
 	// 渲染自动生成的列值，比如关联列、汇总列、创建时间列和更新时间列
+	avCache := map[string]*av.AttributeView{}
+	avCache[attrView.ID] = attrView
 	for _, row := range ret.Rows {
 		for _, cell := range row.Cells {
 			switch cell.ValueType {
@@ -208,7 +210,13 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 					break
 				}
 
-				destAv, _ := av.ParseAttributeView(relKey.Relation.AvID)
+				destAv := avCache[relKey.Relation.AvID]
+				if nil == destAv {
+					destAv, _ = av.ParseAttributeView(relKey.Relation.AvID)
+					if nil != destAv {
+						avCache[relKey.Relation.AvID] = destAv
+					}
+				}
 				if nil == destAv {
 					break
 				}
@@ -246,15 +254,24 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 			case av.KeyTypeRelation: // 渲染关联列
 				relKey, _ := attrView.GetKey(cell.Value.KeyID)
 				if nil != relKey && nil != relKey.Relation {
-					destAv, _ := av.ParseAttributeView(relKey.Relation.AvID)
+					destAv := avCache[relKey.Relation.AvID]
+					if nil == destAv {
+						destAv, _ = av.ParseAttributeView(relKey.Relation.AvID)
+						if nil != destAv {
+							avCache[relKey.Relation.AvID] = destAv
+						}
+					}
 					if nil != destAv {
 						blocks := map[string]*av.Value{}
-						for _, blockValue := range destAv.GetBlockKeyValues().Values {
-							blocks[blockValue.BlockID] = blockValue
-						}
-						for _, blockID := range cell.Value.Relation.BlockIDs {
-							if val := blocks[blockID]; nil != val {
-								cell.Value.Relation.Contents = append(cell.Value.Relation.Contents, val)
+						blockValues := destAv.GetBlockKeyValues()
+						if nil != blockValues {
+							for _, blockValue := range blockValues.Values {
+								blocks[blockValue.BlockID] = blockValue
+							}
+							for _, blockID := range cell.Value.Relation.BlockIDs {
+								if val := blocks[blockID]; nil != val {
+									cell.Value.Relation.Contents = append(cell.Value.Relation.Contents, val)
+								}
 							}
 						}
 					}
@@ -278,11 +295,11 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 				keyValues = append(keyValues, &av.KeyValues{Key: createdKey, Values: []*av.Value{{ID: cell.Value.ID, KeyID: createdKey.ID, BlockID: row.ID, Type: av.KeyTypeCreated, Created: cell.Value.Created}}})
 				rows[row.ID] = keyValues
 			case av.KeyTypeUpdated: // 渲染更新时间
-				ial := map[string]string{}
-				block := row.GetBlockValue()
-				if nil != block && !block.IsDetached {
-					ial = GetBlockAttrsWithoutWaitWriting(row.ID)
+				ial := ials[row.ID]
+				if nil == ial {
+					ial = map[string]string{}
 				}
+				block := row.GetBlockValue()
 				updatedStr := ial["updated"]
 				if "" == updatedStr && nil != block {
 					cell.Value.Updated = av.NewFormattedValueUpdated(block.Block.Updated, 0, av.UpdatedFormatNone)
@@ -314,10 +331,9 @@ func RenderAttributeViewTable(attrView *av.AttributeView, view *av.View, query s
 			switch cell.ValueType {
 			case av.KeyTypeTemplate: // 渲染模板列
 				keyValues := rows[row.ID]
-				ial := map[string]string{}
-				block := row.GetBlockValue()
-				if nil != block && !block.IsDetached {
-					ial = GetBlockAttrsWithoutWaitWriting(row.ID)
+				ial := ials[row.ID]
+				if nil == ial {
+					ial = map[string]string{}
 				}
 				content, renderErr := RenderTemplateCol(ial, keyValues, cell.Value.Template.Content)
 				cell.Value.Template.Content = content
@@ -404,7 +420,7 @@ func RenderTemplateCol(ial map[string]string, rowValues []*av.KeyValues, tplCont
 	}
 
 	goTpl := template.New("").Delims(".action{", "}")
-	tplFuncMap := util.BuiltInTemplateFuncs()
+	tplFuncMap := treenode.BuiltInTemplateFuncs()
 	SQLTemplateFuncs(&tplFuncMap)
 	goTpl = goTpl.Funcs(tplFuncMap)
 	tpl, err := goTpl.Parse(tplContent)
@@ -427,6 +443,20 @@ func RenderTemplateCol(ial map[string]string, rowValues []*av.KeyValues, tplCont
 		if nil == parseErr {
 			dataModel["created"] = created
 		} else {
+			errMsg := parseErr.Error()
+			//logging.LogWarnf("parse created [%s] failed: %s", createdStr, errMsg)
+			if strings.Contains(errMsg, "minute out of range") {
+				// parsing time "20240709158553": minute out of range
+				// 将分秒部分置为 0000
+				createdStr = createdStr[:len("2006010215")] + "0000"
+			} else if strings.Contains(errMsg, "second out of range") {
+				// parsing time "20240709154592": second out of range
+				// 将秒部分置为 00
+				createdStr = createdStr[:len("200601021504")] + "00"
+			}
+			created, parseErr = time.ParseInLocation("20060102150405", createdStr, time.Local)
+		}
+		if nil != parseErr {
 			logging.LogWarnf("parse created [%s] failed: %s", createdStr, parseErr)
 			dataModel["created"] = time.Now()
 		}
@@ -484,6 +514,16 @@ func RenderTemplateCol(ial map[string]string, rowValues []*av.KeyValues, tplCont
 				}
 				dataModel[rowValue.Key.Name] = contents
 			}
+		} else if av.KeyTypeBlock == v.Type {
+			dataModel[rowValue.Key.Name+"_created"] = time.Now()
+			if nil != v.Block {
+				dataModel["entryCreated"] = time.UnixMilli(v.Block.Created)
+			}
+			dataModel["entryUpdated"] = time.Now()
+			if nil != v.Block {
+				dataModel["entryUpdated"] = time.UnixMilli(v.Block.Updated)
+			}
+			dataModel[rowValue.Key.Name] = v.String(true)
 		} else {
 			dataModel[rowValue.Key.Name] = v.String(true)
 		}
@@ -568,8 +608,7 @@ func FillAttributeViewTableCellNilValue(tableCell *av.TableCell, rowID, colID st
 	}
 }
 
-func getAttributeViewContent(avID string,
-	GetBlockAttrsWithoutWaitWriting func(id string) (ret map[string]string)) (content string) {
+func getAttributeViewContent(avID string) (content string) {
 	if "" == avID {
 		return
 	}
@@ -605,7 +644,7 @@ func getAttributeViewContent(avID string,
 		return
 	}
 
-	table := RenderAttributeViewTable(attrView, view, "", GetBlockAttrsWithoutWaitWriting)
+	table := RenderAttributeViewTable(attrView, view, "")
 	for _, col := range table.Columns {
 		buf.WriteString(col.Name)
 		buf.WriteByte(' ')

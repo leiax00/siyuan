@@ -387,9 +387,11 @@ export const removeBlock = (protyle: IProtyle, blockElement: Element, range: Ran
         // 需先移除 removeElement，否则 side 会选中 removeElement
         removeElement.remove();
         focusBlock(previousLastElement, undefined, false);
+        // https://github.com/siyuan-note/siyuan/issues/13254
+        undoOperations.splice(0, 1);
     } else {
         const previousLastEditElement = getContenteditableElement(previousLastElement);
-        if (editableElement && editableElement.textContent !== "") {
+        if (editableElement && (editableElement.textContent !== "" || editableElement.querySelector(".emoji"))) {
             // 非空块
             range.setEndAfter(editableElement.lastChild);
             // 数学公式回车后再删除 https://github.com/siyuan-note/siyuan/issues/3850

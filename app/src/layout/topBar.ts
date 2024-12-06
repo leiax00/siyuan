@@ -1,5 +1,5 @@
 import {getWorkspaceName} from "../util/noRelyPCFunction";
-import {isInAndroid, isInIOS, setStorageVal, updateHotkeyTip} from "../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, isInIOS, setStorageVal, updateHotkeyTip} from "../protyle/util/compatibility";
 import {exitSiYuan, processSync} from "../dialog/processSystem";
 import {goBack, goForward} from "../util/backForward";
 import {syncGuide} from "../sync/syncGuide";
@@ -54,7 +54,7 @@ export const initBar = (app: App) => {
 <div id="barMode" class="toolbar__item ariaLabel${window.siyuan.config.readonly ? " fn__none" : ""}" aria-label="${window.siyuan.languages.appearanceMode}">
     <svg><use xlink:href="#icon${window.siyuan.config.appearance.modeOS ? "Mode" : (window.siyuan.config.appearance.mode === 0 ? "Light" : "Dark")}"></use></svg>
 </div>
-<div id="barExit" class="toolbar__item ariaLabel${(isInIOS() || isInAndroid()) ? "" : " fn__none"}" aria-label="${window.siyuan.languages.safeQuit}">
+<div id="barExit" class="ft__error toolbar__item ariaLabel${(isInIOS() || isInAndroid() || isInHarmony()) ? "" : " fn__none"}" aria-label="${window.siyuan.languages.safeQuit}">
     <svg><use xlink:href="#iconQuit"></use></svg>
 </div>
 <div id="barMore" class="toolbar__item ariaLabel" aria-label="${window.siyuan.languages.more}">
@@ -95,7 +95,7 @@ export const initBar = (app: App) => {
                             }
                         }
                     };
-                    if (!useElement) {
+                    if (!useElement && hideElement.querySelector("svg")) {
                         const svgElement = hideElement.querySelector("svg").cloneNode(true) as HTMLElement;
                         svgElement.classList.add("b3-menu__icon");
                         menuOptions.iconHTML = svgElement.outerHTML;
@@ -119,11 +119,11 @@ export const initBar = (app: App) => {
                 event.stopPropagation();
                 break;
             } else if (targetId === "barExit") {
+                event.stopPropagation();
                 exportLayout({
                     errorExit: true,
                     cb: exitSiYuan,
                 });
-                event.stopPropagation();
                 break;
             } else if (targetId === "barMode") {
                 if (!window.siyuan.menus.menu.element.classList.contains("fn__none") &&

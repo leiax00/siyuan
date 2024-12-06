@@ -4,7 +4,7 @@ import {Constants} from "../constants";
 export const initMessage = () => {
     const messageElement = document.getElementById("message");
     messageElement.innerHTML = `<div class="fn__flex-1"></div>
-<button class="b3-button--cancel b3-button b3-tooltips b3-tooltips__w" aria-label="${window.siyuan.languages.clearMessage}"><svg style="margin-right: 0"><use xlink:href="#iconSelect"></use></svg></button>`;
+<button class="b3-button ft__smaller fn__none">${window.siyuan.languages.clearMessage}</button>`;
     messageElement.addEventListener("click", (event) => {
         let target = event.target as HTMLElement;
         while (target && !target.isEqualNode(messageElement)) {
@@ -32,14 +32,26 @@ export const initMessage = () => {
             target = target.parentElement;
         }
     });
+    const tempMessageElement = document.getElementById("tempMessage");
+    if (tempMessageElement) {
+        showMessage(tempMessageElement.innerHTML);
+        tempMessageElement.remove();
+    }
 };
 
 // type: info/error; timeout: 0 手动关闭；-1 用不关闭
 export const showMessage = (message: string, timeout = 6000, type = "info", messageId?: string) => {
     const messagesElement = document.getElementById("message").firstElementChild;
     if (!messagesElement) {
-        alert(message);
-        return ;
+        document.body.insertAdjacentHTML("beforeend", `<div style="top: 10px;
+    position: fixed;
+    z-index: 100;
+    background: white;
+    padding: 10px;
+    border-radius: 5px;
+    right: 10px;
+    border: 1px solid #e0e0e0;" id='tempMessage'>${message}</div>`);
+        return;
     }
     const id = messageId || genUUID();
     const existElement = messagesElement.querySelector(`.b3-snackbar[data-id="${id}"]`);

@@ -34,6 +34,11 @@ import (
 	"github.com/steambap/captcha"
 )
 
+var (
+	BasicAuthHeaderKey   = "WWW-Authenticate"
+	BasicAuthHeaderValue = "Basic realm=\"SiYuan Authorization Require\", charset=\"UTF-8\""
+)
+
 func LogoutAuth(c *gin.Context) {
 	ret := gulu.Ret.NewResult()
 	defer c.JSON(http.StatusOK, ret)
@@ -217,7 +222,7 @@ func CheckAuth(c *gin.Context) {
 
 	// 放过来自本机的某些请求
 	if localhost {
-		if strings.HasPrefix(c.Request.RequestURI, "/assets/") {
+		if strings.HasPrefix(c.Request.RequestURI, "/assets/") || strings.HasPrefix(c.Request.RequestURI, "/export/") {
 			c.Set(RoleContextKey, RoleAdministrator)
 			c.Next()
 			return
@@ -227,13 +232,13 @@ func CheckAuth(c *gin.Context) {
 			c.Next()
 			return
 		}
-		if strings.HasPrefix(c.Request.RequestURI, "/api/system/getNetwork") {
+		if strings.HasPrefix(c.Request.RequestURI, "/api/system/getNetwork") || strings.HasPrefix(c.Request.RequestURI, "/api/system/getWorkspaceInfo") {
 			c.Set(RoleContextKey, RoleAdministrator)
 			c.Next()
 			return
 		}
 		if strings.HasPrefix(c.Request.RequestURI, "/api/sync/performSync") {
-			if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container {
+			if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container || util.ContainerHarmony == util.Container {
 				c.Set(RoleContextKey, RoleAdministrator)
 				c.Next()
 				return
@@ -300,8 +305,10 @@ func CheckAuth(c *gin.Context) {
 	}
 
 	// WebDAV BasicAuth Authenticate
-	if strings.HasPrefix(c.Request.RequestURI, "/webdav") {
-		c.Header("WWW-Authenticate", "Basic realm=Authorization Required")
+	if strings.HasPrefix(c.Request.RequestURI, "/webdav") ||
+		strings.HasPrefix(c.Request.RequestURI, "/caldav") ||
+		strings.HasPrefix(c.Request.RequestURI, "/carddav") {
+		c.Header(BasicAuthHeaderKey, BasicAuthHeaderValue)
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}

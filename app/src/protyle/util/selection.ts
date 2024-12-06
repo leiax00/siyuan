@@ -136,6 +136,14 @@ export const getEditorRange = (element: Element) => {
     if (getSelection().rangeCount > 0) {
         range = getSelection().getRangeAt(0);
         if (element.isSameNode(range.startContainer) || element.contains(range.startContainer)) {
+            // 有时候点击编辑器头部需要矫正到第一个块中
+            if (range.toString() === "" && range.startContainer.nodeType === 1 && range.startOffset === 0 &&
+                (range.startContainer as HTMLElement).classList.contains("protyle-wysiwyg")) {
+                const focusRange = focusBlock(range.startContainer.firstChild as Element);
+                if (focusRange) {
+                    return focusRange;
+                }
+            }
             return range;
         }
     }
@@ -226,10 +234,17 @@ export const getSelectionPosition = (nodeElement: Element, range?: Range) => {
         }
     } else {
         const rects = range.getClientRects(); // 由于长度过长折行，光标在行首时有多个 rects https://github.com/siyuan-note/siyuan/issues/6156
-        return {    // 选中多行不应遮挡第一行 https://github.com/siyuan-note/siyuan/issues/7541
-            left: rects[rects.length - 1].left,
-            top: rects[0].top
-        };
+        if (range.toString()) {
+            return {    // 选中多行不应遮挡第一行 https://github.com/siyuan-note/siyuan/issues/7541
+                left: rects[rects.length - 1].left,
+                top: rects[0].top
+            };
+        } else {
+            return {    // 代码块首 https://github.com/siyuan-note/siyuan/issues/13113
+                left: rects[rects.length - 1].left,
+                top: rects[rects.length - 1].top
+            };
+        }
     }
 
     return {
@@ -314,17 +329,29 @@ export const setLastNodeRange = (editElement: Element, range: Range, setStart = 
             // 防止单元格中 ⇧↓ 全部选中
             return range;
         }
+        // https://github.com/siyuan-note/siyuan/issues/12792
+        if (!lastNode.lastChild) {
+            break;
+        }
         // 最后一个为多种行内元素嵌套
         lastNode = lastNode.lastChild as Element;
     }
+    // https://github.com/siyuan-note/siyuan/issues/12753
     if (!lastNode) {
-        range.selectNodeContents(editElement);
-        return range;
+        lastNode = editElement;
     }
     if (setStart) {
-        range.setStart(lastNode, lastNode.textContent.length);
+        if (lastNode.nodeType !== 3 && lastNode.classList.contains("render-node") && lastNode.innerHTML === "") {
+            range.setStartAfter(lastNode);
+        } else {
+            range.setStart(lastNode, lastNode.textContent.length);
+        }
     } else {
-        range.setEnd(lastNode, lastNode.textContent.length);
+        if (lastNode.nodeType !== 3 && lastNode.classList.contains("render-node") && lastNode.innerHTML === "") {
+            range.setStartAfter(lastNode);
+        } else {
+            range.setEnd(lastNode, lastNode.textContent.length);
+        }
     }
     return range;
 };
@@ -538,6 +565,7 @@ export const focusBlock = (element: Element, parentElement?: HTMLElement, toStar
             range.collapse(true);
             setRange = true;
         } else if (type === "NodeAttributeView") {
+            /// #if !MOBILE
             const cursorElement = element.querySelector(".av__cursor");
             if (cursorElement) {
                 range.setStart(cursorElement.firstChild, 0);
@@ -545,6 +573,9 @@ export const focusBlock = (element: Element, parentElement?: HTMLElement, toStar
             } else {
                 return false;
             }
+            /// #else
+            return false;
+            /// #endif
         }
         if (setRange) {
             focusByRange(range);

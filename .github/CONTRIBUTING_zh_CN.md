@@ -7,7 +7,7 @@
 
 ## NPM 依赖
 
-安装 pnpm：`npm install -g pnpm@9.1.1`
+安装 pnpm：`npm install -g pnpm@9.12.1`
 
 <details>
 <summary>适用于中国大陆</summary>
@@ -16,11 +16,11 @@
 
 * macOS/Linux: 
  ```
- ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v30.4.0 -D
+ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v32.2.5 -D
  ```
 * Windows:
     * `SET ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
-    * `pnpm install electron@v30.4.0 -D`
+    * `pnpm install electron@v32.2.5 -D`
 
 NPM 镜像：
 
@@ -30,7 +30,7 @@ NPM 镜像：
 
 桌面端进入 app 文件夹运行：
 
-* `pnpm install electron@v30.4.0 -D`
+* `pnpm install electron@v32.2.5 -D`
 * `pnpm run dev`
 * `pnpm run start`
 
@@ -60,4 +60,10 @@ NPM 镜像：
 * `gomobile bind --tags fts5 -ldflags '-s -w' -v -o kernel.aar -target='android/arm64' -androidapi 24 ./mobile/`
 * https://github.com/siyuan-note/siyuan-android
 
-移动端请参考对应项目仓库。
+### Harmony
+
+仅支持在 Linux 下编译，需要安装鸿蒙 SDK，并且需要修改 Go 源码，详情请参考 https://github.com/siyuan-note/siyuan/issues/13184
+
+* `cd kernel/harmony`
+* `./build.sh` （Windows 模拟器使用 `./build-win.sh`）
+* https://github.com/siyuan-note/siyuan-harmony

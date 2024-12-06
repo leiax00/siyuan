@@ -1,13 +1,16 @@
-import {addLoading} from "../ui/initUI";
+import {addLoading, removeLoading} from "../ui/initUI";
 import {fetchPost} from "../../util/fetch";
 import {getDocByScroll, saveScroll} from "../scroll/saveScroll";
 import {renderBacklink} from "../wysiwyg/renderBacklink";
 import {hasClosestByClassName} from "./hasClosest";
 import {preventScroll} from "../scroll/preventScroll";
+import {searchMarkRender} from "../render/searchMarkRender";
+import {restoreLuteMarkdownSyntax} from "./paste";
 
 export const reloadProtyle = (protyle: IProtyle, focus: boolean, updateReadonly?: boolean) => {
     if (!protyle.preview.element.classList.contains("fn__none")) {
         protyle.preview.render(protyle);
+        removeLoading(protyle);
         return;
     }
     if (window.siyuan.config.editor.displayBookmarkIcon) {
@@ -26,10 +29,7 @@ export const reloadProtyle = (protyle: IProtyle, focus: boolean, updateReadonly?
     }
     protyle.lute.SetProtyleMarkNetImg(window.siyuan.config.editor.displayNetImgMark);
     protyle.lute.SetSpellcheck(window.siyuan.config.editor.spellcheck);
-    protyle.lute.SetSup(window.siyuan.config.editor.markdown.inlineSup);
-    protyle.lute.SetSub(window.siyuan.config.editor.markdown.inlineSub);
-    protyle.lute.SetTag(window.siyuan.config.editor.markdown.inlineTag);
-    protyle.lute.SetInlineMath(window.siyuan.config.editor.markdown.inlineMath);
+    restoreLuteMarkdownSyntax(protyle);
     protyle.lute.SetGFMStrikethrough1(false);
     addLoading(protyle);
     if (protyle.options.backlinkData) {
@@ -41,10 +41,10 @@ export const reloadProtyle = (protyle: IProtyle, focus: boolean, updateReadonly?
                 defID: protyle.element.getAttribute("data-defid"),
                 refTreeID: protyle.block.rootID,
                 keyword: isMention ? inputsElement[1].value : inputsElement[0].value,
-                containChildren: true
             }, response => {
                 protyle.options.backlinkData = isMention ? response.data.backmentions : response.data.backlinks;
                 renderBacklink(protyle, protyle.options.backlinkData);
+                searchMarkRender(protyle, protyle.wysiwyg.element.querySelectorAll('span[data-type~="search-mark"]'));
             });
         }
     } else {
@@ -52,8 +52,13 @@ export const reloadProtyle = (protyle: IProtyle, focus: boolean, updateReadonly?
         getDocByScroll({
             protyle,
             focus,
-            scrollAttr: saveScroll(protyle, true),
-            updateReadonly
+            scrollAttr: saveScroll(protyle, true) as IScrollAttr,
+            updateReadonly,
+            cb () {
+                if (protyle.query?.key) {
+                    searchMarkRender(protyle, protyle.wysiwyg.element.querySelectorAll('span[data-type~="search-mark"]'));
+                }
+            }
         });
     }
 };

@@ -3,6 +3,7 @@
   box-sizing: border-box;
   display: flex;
   max-width: 100%;
+  margin: 4px 0 !important;
 
   &:hover .av__views .block__icon {
     opacity: 1;
@@ -14,7 +15,8 @@
   }
 
   &__container {
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
     cursor: auto;
   }
 
@@ -27,7 +29,7 @@
     background: var(--b3-border-color);
     border-radius: var(--b3-border-radius);
 
-    &:after {
+    &::after {
       content: " ";
       border-radius: var(--b3-border-radius);
       position: absolute;
@@ -97,7 +99,7 @@
     bottom: 0;
     height: 26px;
     padding: 0 5px;
-    background-color: var(--av-background);
+    background-color: var(--b3-parent-background);
     font-size: 87.5%;
   }
 
@@ -123,14 +125,28 @@
     position: relative;
     font-size: 87.5%;
 
+    &.dragover__top,
     &.dragover__bottom {
-      border-bottom-color: var(--b3-theme-primary-lighter);
+      box-shadow: none !important;
+    }
+
+    &.dragover__top::after,
+    &.dragover__bottom::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background-color: var(--b3-theme-primary-lighter);
       z-index: 3;
     }
 
-    &.dragover__top {
-      z-index: 3;
-      box-shadow: 0 -3px 0 var(--b3-theme-primary-lighter), inset 0 2px 0 var(--b3-theme-primary-lighter) !important;
+    &.dragover__top::after {
+      top: -2.5px;
+    }
+
+    &.dragover__bottom::after {
+      bottom: -2.5px;
     }
 
     &:hover [data-type="block-more"] {
@@ -141,7 +157,7 @@
     &--hl {
       &:not(.av__row--header) .av__cell,
       &:not(.av__row--header) .av__firstcol {
-        background-color: var(--b3-av-background-hl) !important;
+        background-color: var(--b3-theme-primary-lightest);
       }
 
       .av__firstcol svg {
@@ -160,7 +176,7 @@
 
     &--header,
     &--footer {
-      background-color: var(--av-background);
+      background-color: var(--b3-parent-background);
     }
 
     &--footer {
@@ -175,10 +191,6 @@
         opacity: 1;
       }
 
-      .av__colsticky {
-        background-color: var(--av-background); // 保证盯住时无计算结果的列不被覆盖
-      }
-
       .av__calc {
         display: flex;
         align-items: center;
@@ -190,6 +202,7 @@
         overflow: hidden;
         font-size: 75%;
         white-space: nowrap;
+        line-height: 1.625em;
         cursor: pointer;
 
         &[data-dtype="lineNumber"] {
@@ -218,7 +231,7 @@
         }
 
         &:hover {
-          background-color: var(--b3-av-hover);
+          background-color: var(--b3-list-hover);
         }
       }
     }
@@ -234,7 +247,7 @@
 
         &:hover,
         &:focus {
-          background-color: var(--b3-av-hover);
+          background-color: var(--b3-list-hover);
           box-shadow: none;
         }
       }
@@ -300,13 +313,13 @@
     }
 
     &--select {
-      background-color: var(--b3-menu-background);
+      background-color: var(--b3-theme-primary-lightest);
       box-shadow: 2px 2px 0 var(--b3-theme-primary-lighter) inset, -2px -2px 0 var(--b3-theme-primary-lighter) inset;
       border-radius: var(--b3-border-radius);
     }
 
     &--active {
-      background-color: var(--b3-menu-background);
+      background-color: var(--b3-theme-primary-lightest);
     }
 
     &--header {
@@ -317,7 +330,7 @@
       border-right-color: transparent;
 
       &:hover {
-        background-color: var(--b3-av-hover);
+        background-color: var(--b3-list-hover);
       }
 
       .av__celltext {
@@ -336,6 +349,7 @@
         margin: 0 5px 0 0;
         flex-shrink: 0;
         font-size: inherit;
+        font-family: var(--b3-font-family-emoji);
 
         &--pin {
           margin: 0 0 0 5px;
@@ -431,11 +445,7 @@
     left: 0;
     z-index: 2; // 需大于 av__widthdrag，否则横行滚动后，拖拽会悬浮于 stick 列上
     display: flex;
-
-    &.av__firstcol,
-    & > div:not(.av__cell--select):not(.av__cell--active):not(.av__calc--ashow) {
-      background-color: var(--av-background);
-    }
+    background-color: var(--b3-parent-background);
   }
 
   &__widthdrag {
@@ -515,7 +525,7 @@
         opacity: 1;
       }
 
-      &__item[data-type="nobg"] .b3-menu__label {
+      &__item[data-type="nobg"] {
         cursor: auto;
       }
 
@@ -523,45 +533,6 @@
       &__item--current:not([data-type="nobg"]) {
         background-color: var(--b3-list-hover);
       }
-    }
-  }
-}
-
-.protyle-wysiwyg--select {
-  .av__row--header,
-  .av__row--footer,
-  .av__row--footer .av__colsticky,
-  .av__row--select .av__cell,
-  .av__colsticky.av__firstcol,
-  .av__colsticky > div,
-  .av__cell--select,
-  .av__cell--active,
-  .av__counter {
-    background-color: var(--b3-av-background-hl) !important;
-  }
-}
-
-.protyle-wysiwyg--hl {
-  .av__row--header,
-  .av__row--footer,
-  .av__row--footer .av__colsticky,
-  .av__row--select .av__cell,
-  .av__colsticky.av__firstcol,
-  .av__colsticky > div,
-  .av__cell--select,
-  .av__cell--active,
-  .av__counter {
-    background-color: var(--b3-av-background-hl) !important;
-    transition: var(--b3-background-transition);
-  }
-}
-
-.dragover__top,
-.dragover__bottom {
-  .av__colsticky {
-    &.av__firstcol,
-    & > div:not(.av__cell--select):not(.av__cell--active):not(.av__calc--ashow) {
-      background-color: transparent;
     }
   }
 }

@@ -46,6 +46,7 @@ const openDockMenu = (app: App) => {
                             }
                         }
                         custom = plugin.docks[dockId].mobileModel(document.querySelector('#sidebar [data-type="sidebar-plugin"]'));
+                        window.siyuan.mobile.docks[dockId] = custom;
                     }
                 }
             });
@@ -62,11 +63,6 @@ export const initFramework = (app: App, isStart: boolean) => {
     renderSnippet();
     initKeyboardToolbar();
     const sidebarElement = document.getElementById("sidebar");
-    let outline: MobileOutline;
-    let backlink: MobileBacklinks;
-    let bookmark: MobileBookmarks;
-    let inbox: Inbox;
-    let tag: MobileTags;
     // 不能使用 getEventName，否则点击返回会展开右侧栏
     const firstToolbarElement = sidebarElement.querySelector(".toolbar--border");
     firstToolbarElement.addEventListener("click", (event: MouseEvent) => {
@@ -99,31 +95,31 @@ export const initFramework = (app: App, isStart: boolean) => {
             const tabPanelElement = sidebarElement.lastElementChild.querySelector(`[data-type="${itemType.replace("-tab", "")}"]`);
             if (itemType === type) {
                 if (type === "sidebar-outline-tab") {
-                    if (!outline) {
-                        outline = new MobileOutline(app);
+                    if (!window.siyuan.mobile.docks.outline) {
+                        window.siyuan.mobile.docks.outline = new MobileOutline(app);
                     } else {
-                        outline.update();
+                        window.siyuan.mobile.docks.outline.update();
                     }
                 } else if (type === "sidebar-backlink-tab") {
-                    if (!backlink) {
-                        backlink = new MobileBacklinks(app);
+                    if (!window.siyuan.mobile.docks.backlink) {
+                        window.siyuan.mobile.docks.backlink = new MobileBacklinks(app);
                     } else {
-                        backlink.update();
+                        window.siyuan.mobile.docks.backlink.update();
                     }
                 } else if (type === "sidebar-bookmark-tab") {
-                    if (!bookmark) {
-                        bookmark = new MobileBookmarks(app);
+                    if (!window.siyuan.mobile.docks.bookmark) {
+                        window.siyuan.mobile.docks.bookmark = new MobileBookmarks(app);
                     } else {
-                        bookmark.update();
+                        window.siyuan.mobile.docks.bookmark.update();
                     }
                 } else if (type === "sidebar-tag-tab") {
-                    if (!tag) {
-                        tag = new MobileTags(app);
+                    if (!window.siyuan.mobile.docks.tag) {
+                        window.siyuan.mobile.docks.tag = new MobileTags(app);
                     } else {
-                        tag.update();
+                        window.siyuan.mobile.docks.tag.update();
                     }
-                } else if (type === "sidebar-inbox-tab" && !inbox) {
-                    inbox = new Inbox(app, document.querySelector('#sidebar [data-type="sidebar-inbox"]'));
+                } else if (type === "sidebar-inbox-tab" && !window.siyuan.mobile.docks.inbox) {
+                    window.siyuan.mobile.docks.inbox = new Inbox(app, document.querySelector('#sidebar [data-type="sidebar-inbox"]'));
                 } else if (type === "sidebar-plugin-tab") {
                     if (!custom) {
                         tabPanelElement.innerHTML = `<div class="b3-list--empty">${window.siyuan.languages.emptyContent}</div>`;
@@ -140,20 +136,20 @@ export const initFramework = (app: App, isStart: boolean) => {
             }
         });
     });
-    window.siyuan.mobile.files = new MobileFiles(app);
+    window.siyuan.mobile.docks.file = new MobileFiles(app);
     document.getElementById("toolbarFile").addEventListener("click", () => {
         hideKeyboardToolbar();
         activeBlur();
         sidebarElement.style.transform = "translateX(0px)";
         const type = sidebarElement.querySelector(".toolbar--border .toolbar__icon--active").getAttribute("data-type");
         if (type === "sidebar-outline-tab") {
-            outline.update();
+            window.siyuan.mobile.docks.outline.update();
         } else if (type === "sidebar-backlink-tab") {
-            backlink.update();
+            window.siyuan.mobile.docks.backlink.update();
         } else if (type === "sidebar-bookmark-tab") {
-            bookmark.update();
+            window.siyuan.mobile.docks.bookmark.update();
         } else if (type === "sidebar-tag-tab") {
-            tag.update();
+            window.siyuan.mobile.docks.tag.update();
         }
     });
     // 用 touchstart 会导致键盘不收起
@@ -174,7 +170,7 @@ export const initFramework = (app: App, isStart: boolean) => {
         const idZoomIn = getIdZoomInByPath();
         if (idZoomIn.id) {
             openMobileFileById(app, idZoomIn.id,
-                idZoomIn.isZoomIn ? [Constants.CB_GET_ALL, Constants.CB_GET_HL] : [Constants.CB_GET_HL, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL]);
+                idZoomIn.isZoomIn ? [Constants.CB_GET_ALL] : [Constants.CB_GET_HL, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL]);
             return;
         }
         if (window.siyuan.config.fileTree.closeTabsOnStart && isStart) {
@@ -184,12 +180,12 @@ export const initFramework = (app: App, isStart: boolean) => {
         const localDoc = window.siyuan.storage[Constants.LOCAL_DOCINFO];
         fetchPost("/api/block/checkBlockExist", {id: localDoc.id}, existResponse => {
             if (existResponse.data) {
-                openMobileFileById(app, localDoc.id, [Constants.CB_GET_SCROLL, Constants.CB_GET_HL]);
+                openMobileFileById(app, localDoc.id, [Constants.CB_GET_SCROLL]);
             } else {
                 fetchPost("/api/block/getRecentUpdatedBlocks", {}, (response) => {
                     if (response.data.length !== 0) {
                         checkFold(response.data[0].id, (zoomIn) => {
-                            openMobileFileById(app, response.data[0].id, zoomIn ? [Constants.CB_GET_ALL, Constants.CB_GET_HL] : [Constants.CB_GET_HL, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL]);
+                            openMobileFileById(app, response.data[0].id, zoomIn ? [Constants.CB_GET_ALL] : [Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL]);
                         });
                     } else {
                         setEmpty(app);

@@ -41,6 +41,7 @@ import {focusBlock, getEditorRange} from "./util/selection";
 import {hasClosestBlock} from "./util/hasClosest";
 import {setStorageVal} from "./util/compatibility";
 import {merge} from "./util/merge";
+import {getAllModels} from "../layout/getAll";
 
 export class Protyle {
 
@@ -51,9 +52,9 @@ export class Protyle {
      * @param id 要挂载 Protyle 的元素或者元素 ID。
      * @param options Protyle 参数
      */
-    constructor(app: App, id: HTMLElement, options?: IOptions) {
+    constructor(app: App, id: HTMLElement, options?: IProtyleOptions) {
         this.version = Constants.SIYUAN_VERSION;
-        let pluginsOptions: IOptions = options;
+        let pluginsOptions: IProtyleOptions = options;
         app.plugins.forEach(item => {
             if (item.protyleOptions) {
                 pluginsOptions = merge(pluginsOptions, item.protyleOptions);
@@ -71,7 +72,19 @@ export class Protyle {
             element: id,
             options: mergedOptions,
             block: {},
+            highlight: {
+                mark: new Highlight(),
+                markHL: new Highlight(),
+                ranges: [],
+                rangeIndex: 0,
+                styleElement: document.createElement("style"),
+            }
         };
+
+        const styleId = genUUID();
+        this.protyle.highlight.styleElement.dataset.uuid = styleId;
+        this.protyle.highlight.styleElement.textContent = `.protyle-wysiwyg::highlight(search-mark-${styleId}) {background-color: var(--b3-protyle-inline-mark-background);color: var(--b3-protyle-inline-mark-color);}
+  .protyle-wysiwyg::highlight(search-mark-hl-${styleId}) {background-color: var(--b3-theme-primary-lighter);box-shadow: 0 0 0 .5px var(--b3-theme-on-background);}`;
 
         this.protyle.hint = new Hint(this.protyle);
         if (mergedOptions.render.breadcrumb) {
@@ -125,11 +138,20 @@ export class Protyle {
                             }
                             break;
                         case "transactions":
-                            data.data[0].doOperations.forEach((item: IOperation) => {
+                            data.data[0].doOperations.find((item: IOperation) => {
                                 if (!this.protyle.preview.element.classList.contains("fn__none") &&
                                     item.action !== "updateAttrs"   // 预览模式下点击只读
                                 ) {
                                     this.protyle.preview.render(this.protyle);
+                                } else if (options.backlinkData && ["delete", "move"].includes(item.action)) {
+                                    // 只对特定情况刷新，否则展开、编辑等操作刷新会频繁
+                                    getAllModels().backlink.find(backlinkItem => {
+                                        if (backlinkItem.element.contains(this.protyle.element)) {
+                                            backlinkItem.refresh();
+                                            return true;
+                                        }
+                                    });
+                                    return true;
                                 } else {
                                     onTransaction(this.protyle, item, false);
                                 }
@@ -260,7 +282,7 @@ export class Protyle {
         }
     }
 
-    private getDoc(mergedOptions: IOptions) {
+    private getDoc(mergedOptions: IProtyleOptions) {
         fetchPost("/api/filetree/getDoc", {
             id: mergedOptions.blockId,
             isBacklink: mergedOptions.action.includes(Constants.CB_GET_BACKLINK),
@@ -279,7 +301,7 @@ export class Protyle {
         });
     }
 
-    private afterOnGet(mergedOptions: IOptions) {
+    private afterOnGet(mergedOptions: IProtyleOptions) {
         if (this.protyle.model) {
             /// #if !MOBILE
             if (mergedOptions.action?.includes(Constants.CB_GET_FOCUS) || mergedOptions.action?.includes(Constants.CB_GET_OPENNEW)) {

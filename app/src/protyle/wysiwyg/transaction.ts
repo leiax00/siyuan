@@ -347,11 +347,21 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
     if (operation.action === "unfoldHeading") {
         const scrollTop = protyle.contentElement.scrollTop;
         protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach(item => {
+            item.removeAttribute("fold");
+            // undo 会走 transaction
+            if (isUndo) {
+                return;
+            }
+            const embedElement = isInEmbedBlock(item);
+            if (embedElement) {
+                embedElement.removeAttribute("data-render");
+                blockRender(protyle, embedElement);
+                return;
+            }
             if (operation.retData) { // undo 的时候没有 retData
                 removeUnfoldRepeatBlock(operation.retData, protyle);
                 item.insertAdjacentHTML("afterend", operation.retData);
             }
-            item.removeAttribute("fold");
             if (operation.data === "remove") {
                 item.remove();
             }
@@ -376,11 +386,25 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                 removeFoldHeading(item);
             }
         });
+        // undo 会走 transaction
+        if (isUndo) {
+            return;
+        }
         if (operation.retData) {
             operation.retData.forEach((item: string) => {
-                protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${item}"]`).forEach(item => {
-                    item.remove();
+                let embedElement: HTMLElement | false;
+                Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${item}"]`)).find(itemElement => {
+                    embedElement = isInEmbedBlock(itemElement);
+                    if (embedElement) {
+                        return true;
+                    }
+                    itemElement.remove();
                 });
+                // 折叠嵌入块的父级
+                if (embedElement) {
+                    embedElement.removeAttribute("data-render");
+                    blockRender(protyle, embedElement);
+                }
             });
             if (protyle.wysiwyg.element.childElementCount === 0) {
                 zoomOut({
@@ -394,7 +418,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         return;
     }
     if (operation.action === "delete") {
-        if (updateElements.length > 0) {
+        if (updateElements.length > 0 || !isUndo) {
             deleteBlock(updateElements, operation.id, protyle, isUndo);
         } else if (isUndo) {
             zoomOut({
@@ -646,6 +670,18 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
                     cursorElements.push(item.nextElementSibling);
                 }
             });
+        } else if (operation.nextID) {
+            Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.nextID}"]`)).forEach(item => {
+                const embedElement = isInEmbedBlock(item);
+                if (embedElement) {
+                    // https://github.com/siyuan-note/siyuan/issues/5524
+                    embedElement.removeAttribute("data-render");
+                    blockRender(protyle, embedElement);
+                } else {
+                    item.insertAdjacentHTML("beforebegin", operation.data);
+                    cursorElements.push(item.previousElementSibling);
+                }
+            });
         } else {
             if (!protyle.options.backlinkData && operation.parentID === protyle.block.parentID) {
                 protyle.wysiwyg.element.insertAdjacentHTML("afterbegin", operation.data);
@@ -706,7 +742,8 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: 
         "setAttrViewSorts", "setAttrViewColCalc", "removeAttrViewCol", "updateAttrViewColNumberFormat", "removeAttrViewBlock",
         "replaceAttrViewBlock", "updateAttrViewColTemplate", "setAttrViewColPin", "addAttrViewView", "setAttrViewColIcon",
         "removeAttrViewView", "setAttrViewViewName", "setAttrViewViewIcon", "duplicateAttrViewView", "sortAttrViewView",
-        "updateAttrViewColRelation", "setAttrViewPageSize", "updateAttrViewColRollup", "sortAttrViewKey", "duplicateAttrViewKey"].includes(operation.action)) {
+        "updateAttrViewColRelation", "setAttrViewPageSize", "updateAttrViewColRollup", "sortAttrViewKey",
+        "duplicateAttrViewKey", "setAttrViewViewDesc", "setAttrViewColDesc"].includes(operation.action)) {
         refreshAV(protyle, operation);
         return;
     }
@@ -1084,7 +1121,6 @@ export const transaction = (protyle: IProtyle, doOperations: IOperation[], undoO
         protyle.transactionTime - time < Constants.TIMEOUT_INPUT) {
         needDebounce = true;
     }
-    protyle.wysiwyg.lastHTMLs = {};
     if (undoOperations) {
         if (window.siyuan.config.fileTree.openFilesUseCurrentTab && protyle.model) {
             protyle.model.headElement.classList.remove("item--unupdate");
@@ -1166,6 +1202,12 @@ const processFold = (operation: IOperation, protyle: IProtyle) => {
         if (operation.action === "unfoldHeading") {
             const scrollTop = protyle.contentElement.scrollTop;
             protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach(item => {
+                const embedElement = isInEmbedBlock(item);
+                if (embedElement) {
+                    embedElement.removeAttribute("data-render");
+                    blockRender(protyle, embedElement);
+                    return;
+                }
                 if (!item.lastElementChild.classList.contains("protyle-attr")) {
                     item.lastElementChild.remove();
                 }
@@ -1191,6 +1233,13 @@ const processFold = (operation: IOperation, protyle: IProtyle) => {
             protyle.scroll.lastScrollTop = scrollTop;
             return;
         }
+        protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`).forEach(item => {
+            const embedElement = isInEmbedBlock(item);
+            if (embedElement) {
+                embedElement.removeAttribute("data-render");
+                blockRender(protyle, embedElement);
+            }
+        });
         // 折叠标题后未触发动态加载 https://github.com/siyuan-note/siyuan/issues/4168
         if (protyle.wysiwyg.element.lastElementChild.getAttribute("data-eof") !== "2" &&
             !protyle.scroll.element.classList.contains("fn__none") &&

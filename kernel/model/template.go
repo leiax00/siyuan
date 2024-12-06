@@ -42,7 +42,7 @@ import (
 
 func RenderGoTemplate(templateContent string) (ret string, err error) {
 	tmpl := template.New("")
-	tplFuncMap := util.BuiltInTemplateFuncs()
+	tplFuncMap := treenode.BuiltInTemplateFuncs()
 	sql.SQLTemplateFuncs(&tplFuncMap)
 	tmpl = tmpl.Funcs(tplFuncMap)
 	tpl, err := tmpl.Parse(templateContent)
@@ -95,10 +95,10 @@ func SearchTemplate(keyword string) (ret []*Block) {
 		if group.IsDir() {
 			var templateBlocks []*Block
 			templateDir := filepath.Join(templates, group.Name())
-			filelock.Walk(templateDir, func(path string, info fs.FileInfo, err error) error {
-				name := strings.ToLower(info.Name())
+			filelock.Walk(templateDir, func(path string, d fs.DirEntry, err error) error {
+				name := strings.ToLower(d.Name())
 				if strings.HasPrefix(name, ".") {
-					if info.IsDir() {
+					if d.IsDir() {
 						return filepath.SkipDir
 					}
 					return nil
@@ -193,6 +193,51 @@ func DocSaveAsTemplate(id, name string, overwrite bool) (code int, err error) {
 	return
 }
 
+func RenderDynamicIconContentTemplate(content, id string) (ret string) {
+	tree, err := LoadTreeByBlockID(id)
+	if err != nil {
+		return
+	}
+
+	node := treenode.GetNodeInTree(tree, id)
+	if nil == node {
+		return
+	}
+	block := sql.BuildBlockFromNode(node, tree)
+	if nil == block {
+		return
+	}
+
+	dataModel := map[string]string{}
+	title := block.Name
+	if "d" == block.Type {
+		title = block.Content
+	}
+	dataModel["title"] = title
+	dataModel["id"] = block.ID
+	dataModel["name"] = block.Name
+	dataModel["alias"] = block.Alias
+
+	goTpl := template.New("").Delims(".action{", "}")
+	tplFuncMap := treenode.BuiltInTemplateFuncs()
+	sql.SQLTemplateFuncs(&tplFuncMap)
+	goTpl = goTpl.Funcs(tplFuncMap)
+	tpl, err := goTpl.Funcs(tplFuncMap).Parse(content)
+	if err != nil {
+		err = errors.New(fmt.Sprintf(Conf.Language(44), err.Error()))
+		return
+	}
+
+	buf := &bytes.Buffer{}
+	buf.Grow(4096)
+	if err = tpl.Execute(buf, dataModel); err != nil {
+		err = errors.New(fmt.Sprintf(Conf.Language(44), err.Error()))
+		return
+	}
+	ret = buf.String()
+	return
+}
+
 func RenderTemplate(p, id string, preview bool) (tree *parse.Tree, dom string, err error) {
 	tree, err = LoadTreeByBlockID(id)
 	if err != nil {
@@ -224,7 +269,7 @@ func RenderTemplate(p, id string, preview bool) (tree *parse.Tree, dom string, e
 	}
 
 	goTpl := template.New("").Delims(".action{", "}")
-	tplFuncMap := util.BuiltInTemplateFuncs()
+	tplFuncMap := treenode.BuiltInTemplateFuncs()
 	sql.SQLTemplateFuncs(&tplFuncMap)
 	goTpl = goTpl.Funcs(tplFuncMap)
 	tpl, err := goTpl.Funcs(tplFuncMap).Parse(gulu.Str.FromBytes(md))
@@ -314,7 +359,7 @@ func RenderTemplate(p, id string, preview bool) (tree *parse.Tree, dom string, e
 						return ast.WalkContinue
 					}
 
-					table := sql.RenderAttributeViewTable(attrView, view, "", GetBlockAttrsWithoutWaitWriting)
+					table := sql.RenderAttributeViewTable(attrView, view, "")
 
 					var aligns []int
 					for range table.Columns {
@@ -341,9 +386,9 @@ func RenderTemplate(p, id string, preview bool) (tree *parse.Tree, dom string, e
 	})
 	for _, n := range nodesNeedAppendChild {
 		if ast.NodeBlockquote == n.Type {
-			n.FirstChild.InsertAfter(treenode.NewParagraph())
+			n.FirstChild.InsertAfter(treenode.NewParagraph(""))
 		} else {
-			n.AppendChild(treenode.NewParagraph())
+			n.AppendChild(treenode.NewParagraph(""))
 		}
 	}
 	for _, n := range unlinks {
@@ -361,6 +406,13 @@ func RenderTemplate(p, id string, preview bool) (tree *parse.Tree, dom string, e
 		}
 		return ast.WalkContinue
 	})
+
+	icon := tree.Root.IALAttr("icon")
+	if "" != icon {
+		// 动态图标需要反转义 https://github.com/siyuan-note/siyuan/issues/13211
+		icon = util.UnescapeHTML(icon)
+		tree.Root.SetIALAttr("icon", icon)
+	}
 
 	luteEngine := NewLute()
 	dom = luteEngine.Tree2BlockDOM(tree, luteEngine.RenderOptions)

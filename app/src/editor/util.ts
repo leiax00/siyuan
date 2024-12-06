@@ -34,17 +34,18 @@ import {App} from "../index";
 import {newCardModel} from "../card/newCardTab";
 import {preventScroll} from "../protyle/scroll/preventScroll";
 import {clearOBG} from "../layout/dock/util";
+import {Model} from "../layout/Model";
 
 export const openFileById = async (options: {
     app: App,
     id: string,
     position?: string,
     mode?: TEditorMode,
-    action?: string[]
+    action?: TProtyleAction[]
     keepCursor?: boolean
     zoomIn?: boolean
     removeCurrentTab?: boolean
-    afterOpen?: () => void
+    afterOpen?: (model: Model) => void
 }) => {
     const response = await fetchSyncPost("/api/block/getBlockInfo", {id: options.id});
     if (response.code === -1) {
@@ -112,7 +113,7 @@ export const openFile = async (options: IOpenFileOptions) => {
         });
         if (asset) {
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(asset);
             }
             return asset.parent;
         }
@@ -129,14 +130,14 @@ export const openFile = async (options: IOpenFileOptions) => {
         });
         if (custom) {
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(custom);
             }
             return custom.parent;
         }
         const hasModel = getUnInitTab(options);
         if (hasModel) {
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(hasModel.model);
             }
             return hasModel;
         }
@@ -162,7 +163,10 @@ export const openFile = async (options: IOpenFileOptions) => {
                 if (hasClosestByClassName(item.element, "layout__wnd--active")) {
                     activeEditor = item;
                 }
-                editor = item;
+                if (!editor || item.headElement.getAttribute("data-activetime") > editor.headElement.getAttribute("data-activetime")) {
+                    // https://github.com/siyuan-note/siyuan/issues/11981#issuecomment-2351939812
+                    editor = item;
+                }
             }
             if (activeEditor) {
                 return true;
@@ -176,7 +180,7 @@ export const openFile = async (options: IOpenFileOptions) => {
                 switchEditor(editor, options, allModels);
             }
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(editor);
             }
             return editor.parent;
         }
@@ -184,7 +188,7 @@ export const openFile = async (options: IOpenFileOptions) => {
         const hasEditor = getUnInitTab(options);
         if (hasEditor) {
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(hasEditor.model);
             }
             return hasEditor;
         }
@@ -192,10 +196,14 @@ export const openFile = async (options: IOpenFileOptions) => {
 
     /// #if !BROWSER
     // https://github.com/siyuan-note/siyuan/issues/7491
-    if (!options.position) {
+    if (!options.position || (options.position === "right" && options.assetPath)) {
         let hasMatch = false;
-        const optionsClone = Object.assign({}, options);
-        delete optionsClone.app;    // 防止 JSON.stringify 时产生递归
+        const optionsClone: IObject = {};
+        Object.keys(options).forEach((key: keyof IOpenFileOptions) => {
+            if (key !== "app" && options[key] && typeof options[key] !== "function") {
+                optionsClone[key] = JSON.parse(JSON.stringify(options[key]));
+            }
+        });
         hasMatch = await ipcRenderer.invoke(Constants.SIYUAN_GET, {
             cmd: Constants.SIYUAN_OPEN_FILE,
             options: JSON.stringify(optionsClone),
@@ -268,7 +276,7 @@ export const openFile = async (options: IOpenFileOptions) => {
             }
             wnd.showHeading();
             if (options.afterOpen) {
-                options.afterOpen();
+                options.afterOpen(createdTab.model);
             }
             return createdTab;
         }
@@ -305,7 +313,7 @@ export const openFile = async (options: IOpenFileOptions) => {
         }
         wnd.showHeading();
         if (options.afterOpen) {
-            options.afterOpen();
+            options.afterOpen(createdTab.model);
         }
         return createdTab;
     }
@@ -378,7 +386,6 @@ const switchEditor = (editor: Editor, options: IOpenFileOptions, allModels: IMod
             if (nodeElement) {
                 const newRange = focusBlock(nodeElement);
                 if (newRange) {
-                    // 需要更新 range，否则文档大纲点击导致切换页签时因为 resize 中 `保持光标位置不变` 会导致光标跳动
                     editor.editor.protyle.toolbar.range = newRange;
                 }
                 scrollCenter(editor.editor.protyle, nodeElement, true);
@@ -574,25 +581,29 @@ export const isCurrentEditor = (blockId: string) => {
 
 export const updateOutline = (models: IModels, protyle: IProtyle, reload = false) => {
     models.outline.find(item => {
-        if (reload || (item.type === "pin" && (!protyle || item.blockId !== protyle.block?.rootID))) {
+        if (reload ||
+            (item.type === "pin" &&
+                (!protyle || item.blockId !== protyle.block?.rootID ||
+                    item.isPreview === protyle.preview.element.classList.contains("fn__none"))
+            )
+        ) {
             let blockId = "";
             if (protyle && protyle.block) {
                 blockId = protyle.block.rootID;
             }
-            if (blockId === item.blockId && !reload) {
+            if (blockId === item.blockId && !reload && item.isPreview !== protyle.preview.element.classList.contains("fn__none")) {
                 return;
             }
-            if (protyle && !protyle.preview.element.classList.contains("fn__none")) {
-                protyle.preview.render(protyle);
-                return;
-            }
+
             fetchPost("/api/outline/getDocOutline", {
                 id: blockId,
+                preview: !protyle.preview.element.classList.contains("fn__none")
             }, response => {
-                if (!reload && (!isCurrentEditor(blockId) || item.blockId === blockId)) {
+                if (!reload && (!isCurrentEditor(blockId) || item.blockId === blockId) &&
+                    item.isPreview !== protyle.preview.element.classList.contains("fn__none")) {
                     return;
                 }
-                item.isPreview = false;
+                item.isPreview = !protyle.preview.element.classList.contains("fn__none");
                 item.update(response, blockId);
                 if (protyle) {
                     item.updateDocTitle(protyle.background.ial);

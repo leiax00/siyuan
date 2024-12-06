@@ -17,9 +17,8 @@
 package model
 
 import (
-	"time"
-
 	"github.com/88250/lute/ast"
+	"github.com/88250/lute/html"
 	"github.com/88250/lute/parse"
 	"github.com/emirpasic/gods/stacks/linkedliststack"
 	"github.com/siyuan-note/siyuan/kernel/treenode"
@@ -207,14 +206,31 @@ func (tx *Transaction) doMoveOutlineHeading(operation *Operation) (ret *TxErr) {
 	return
 }
 
-func Outline(rootID string) (ret []*Path, err error) {
-	time.Sleep(util.FrontendQueueInterval)
-	WaitForWritingFiles()
+func Outline(rootID string, preview bool) (ret []*Path, err error) {
+	FlushTxQueue()
 
 	ret = []*Path{}
 	tree, _ := LoadTreeByBlockID(rootID)
 	if nil == tree {
 		return
+	}
+
+	if preview && Conf.Export.AddTitle {
+		if root, _ := getBlock(tree.ID, tree); nil != root {
+			root.IAL["type"] = "doc"
+			title := &ast.Node{ID: root.ID, Type: ast.NodeHeading, HeadingLevel: 1}
+			for k, v := range root.IAL {
+				if "type" == k {
+					continue
+				}
+				title.SetIALAttr(k, v)
+			}
+			title.InsertAfter(&ast.Node{Type: ast.NodeKramdownBlockIAL, Tokens: parse.IAL2Tokens(title.KramdownIAL)})
+
+			content := html.UnescapeString(root.Content)
+			title.AppendChild(&ast.Node{Type: ast.NodeText, Tokens: []byte(content)})
+			tree.Root.PrependChild(title)
+		}
 	}
 
 	ret = outline(tree)

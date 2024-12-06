@@ -9,6 +9,7 @@ import {getCellText} from "../protyle/render/av/cell";
 import {isTouchDevice} from "../util/functions";
 
 let popoverTargetElement: HTMLElement;
+let notebookItemElement: HTMLElement | false;
 export const initBlockPopover = (app: App) => {
     let timeout: number;
     let timeoutHide: number;
@@ -24,17 +25,14 @@ export const initBlockPopover = (app: App) => {
             hasClosestByClassName(event.target, "av__calc--ashow") ||
             hasClosestByClassName(event.target, "av__cell");
         if (aElement) {
-            let tip = aElement.getAttribute("aria-label") || aElement.getAttribute("data-inline-memo-content");
+            let tooltipClass = "";
+            let tip = aElement.getAttribute("aria-label");
             if (aElement.classList.contains("av__cell")) {
-                if (aElement.classList.contains("av__cell--header")) {
-                    const textElement = aElement.querySelector(".av__celltext");
-                    if (textElement.scrollWidth > textElement.clientWidth + 2) {
-                        tip = getCellText(aElement);
-                    }
-                } else {
+                if (!aElement.classList.contains("av__cell--header")) {
                     if (aElement.firstElementChild?.getAttribute("data-type") === "url") {
                         if (aElement.firstElementChild.textContent.indexOf("...") > -1) {
                             tip = Lute.EscapeHTMLStr(aElement.firstElementChild.getAttribute("data-href"));
+                            tooltipClass = "href";
                         }
                     }
                     if (!tip && aElement.dataset.wrap !== "true" && event.target.dataset.type !== "block-more" && !hasClosestByClassName(event.target, "block__icon")) {
@@ -46,15 +44,23 @@ export const initBlockPopover = (app: App) => {
                     }
                 }
             } else if (aElement.classList.contains("av__celltext--url")) {
-                tip = `<span style="word-break: break-all">${tip.substring(0, Constants.SIZE_TITLE)}</span><br>${aElement.getAttribute("data-name")}`;
+                tip = tip ? `<span style="word-break: break-all">${tip.substring(0, Constants.SIZE_TITLE)}</span><div class="fn__hr"></div>${aElement.getAttribute("data-name")}` : aElement.getAttribute("data-name");
+                tooltipClass = "href";
             } else if (aElement.classList.contains("av__calc--ashow") && aElement.clientWidth + 2 < aElement.scrollWidth) {
                 tip = aElement.lastChild.textContent + " " + aElement.firstElementChild.textContent;
+            }
+            if (!tip) {
+                tip = aElement.getAttribute("data-inline-memo-content");
+                if (tip) {
+                    tooltipClass = "memo"; // 为行级备注添加 class https://github.com/siyuan-note/siyuan/issues/6161
+                }
             }
             if (!tip) {
                 const href = aElement.getAttribute("data-href") || "";
                 // 链接地址强制换行 https://github.com/siyuan-note/siyuan/issues/11539
                 if (href) {
                     tip = `<span style="word-break: break-all">${href.substring(0, Constants.SIZE_TITLE)}</span>`;
+                    tooltipClass = "href"; // 为超链接添加 class https://github.com/siyuan-note/siyuan/issues/11440#issuecomment-2119080691
                 }
                 const title = aElement.getAttribute("data-title");
                 if (tip && isLocalPath(href) && !aElement.classList.contains("b3-tooltips")) {
@@ -62,36 +68,55 @@ export const initBlockPopover = (app: App) => {
                     fetchPost("/api/asset/statAsset", {path: href}, (response) => {
                         if (response.code === 1) {
                             if (title) {
-                                assetTip += "<br>" + title;
+                                assetTip += '<div class="fn__hr"></div>' + title;
                             }
                         } else {
-                            assetTip += ` ${response.data.hSize}${title ? "<br>" + title : ""}<br>${window.siyuan.languages.modifiedAt} ${response.data.hUpdated}<br>${window.siyuan.languages.createdAt} ${response.data.hCreated}`;
+                            assetTip += ` ${response.data.hSize}${title ? '<div class="fn__hr"></div>' + title : ""}<br>${window.siyuan.languages.modifiedAt} ${response.data.hUpdated}<br>${window.siyuan.languages.createdAt} ${response.data.hCreated}`;
                         }
-                        showTooltip(assetTip, aElement);
+                        showTooltip(assetTip, aElement, tooltipClass);
                     });
                     tip = "";
                 } else if (title) {
-                    tip += "<br>" + title;
+                    tip += '<div class="fn__hr"></div>' + title;
                 }
             }
             if (tip && !aElement.classList.contains("b3-tooltips")) {
                 // https://github.com/siyuan-note/siyuan/issues/11294
                 try {
-                    showTooltip(decodeURIComponent(tip), aElement);
+                    showTooltip(decodeURIComponent(tip), aElement, tooltipClass);
                 } catch (e) {
                     // https://ld246.com/article/1718235737991
-                    showTooltip(tip, aElement);
+                    showTooltip(tip, aElement, tooltipClass);
                 }
                 event.stopPropagation();
             } else {
                 hideTooltip();
             }
         } else if (!aElement) {
-            const tipElement = hasClosestByAttribute(event.target, "id", "tooltip", true);
-            if (!tipElement || (
-                tipElement && (tipElement.clientHeight >= tipElement.scrollHeight && tipElement.clientWidth >= tipElement.scrollWidth)
-            )) {
-                hideTooltip();
+            notebookItemElement = hasClosestByClassName(event.target, "b3-list-item__text");
+            if (notebookItemElement && notebookItemElement.parentElement.getAttribute("data-type") === "navigation-root") {
+                showTooltip(notebookItemElement.getAttribute("aria-label") || "", notebookItemElement);
+                fetchPost("/api/notebook/getNotebookInfo", {notebook: notebookItemElement.parentElement.parentElement.getAttribute("data-url")}, (response) => {
+                    const boxData = response.data.boxInfo;
+                    const tip = `${boxData.name} <small class='ft__on-surface'>${boxData.hSize}</small>${boxData.docCount !== 0 ? window.siyuan.languages.includeSubFile.replace("x", boxData.docCount) : ""}<br>${window.siyuan.languages.modifiedAt} ${boxData.hMtime}<br>${window.siyuan.languages.createdAt} ${boxData.hCtime}`;
+
+                    const scopeNotebookItemElement = hasClosestByClassName(event.target, "b3-list-item__text");
+                    if (notebookItemElement && scopeNotebookItemElement && notebookItemElement.isSameNode(scopeNotebookItemElement)) {
+                        showTooltip(tip, notebookItemElement);
+                    }
+                    if (scopeNotebookItemElement &&
+                        scopeNotebookItemElement.parentElement.getAttribute("data-type") === "navigation-root" &&
+                        scopeNotebookItemElement.parentElement.parentElement.getAttribute("data-url") === boxData.id) {
+                        scopeNotebookItemElement.setAttribute("aria-label", tip);
+                    }
+                });
+            } else {
+                const tipElement = hasClosestByAttribute(event.target, "id", "tooltip", true);
+                if (!tipElement || (
+                    tipElement && (tipElement.clientHeight >= tipElement.scrollHeight && tipElement.clientWidth >= tipElement.scrollWidth)
+                )) {
+                    hideTooltip();
+                }
             }
         }
         if (window.siyuan.config.editor.floatWindowMode === 1 || window.siyuan.shiftIsPressed) {
@@ -233,6 +258,9 @@ const hidePopover = (event: MouseEvent & { path: HTMLElement[] }) => {
                 if ((item.targetElement || typeof item.x === "number") && item.element.getAttribute("data-pin") === "false") {
                     if (menuLevel && menuLevel >= itemLevel) {
                         // 有 gutter 菜单时不隐藏
+                    } else if (item.targetElement && item.targetElement.classList.contains("protyle-wysiwyg__embed") &&
+                        item.targetElement.contains(targetElement)) {
+                        // 点击嵌入块后浮窗消失后再快速点击嵌入块无法弹出浮窗 https://github.com/siyuan-note/siyuan/issues/12511
                     } else {
                         item.destroy();
                     }

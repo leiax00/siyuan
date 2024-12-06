@@ -258,10 +258,10 @@ func GetBlockTreeRootsByHPath(boxID, hPath string) (ret []*BlockTree) {
 	return
 }
 
-func GetBlockTreeRootByHPathPreferredParentID(boxID, hPath, preferredParentID string) (ret *BlockTree) {
+func GetBlockTreeByHPathPreferredParentID(boxID, hPath, preferredParentID string) (ret *BlockTree) {
 	hPath = gulu.Str.RemoveInvisible(hPath)
 	var roots []*BlockTree
-	sqlStmt := "SELECT * FROM blocktrees WHERE box_id = ? AND hpath = ? AND parent_id = ? AND type = 'd'"
+	sqlStmt := "SELECT * FROM blocktrees WHERE box_id = ? AND hpath = ? AND parent_id = ? LIMIT 1"
 	rows, err := db.Query(sqlStmt, boxID, hPath, preferredParentID)
 	if err != nil {
 		logging.LogErrorf("sql query [%s] failed: %s", sqlStmt, err)
@@ -343,10 +343,24 @@ func GetBlockTrees(ids []string) (ret map[string]*BlockTree) {
 		return
 	}
 
-	sqlStmt := "SELECT * FROM blocktrees WHERE id IN ('" + strings.Join(ids, "','") + "')"
-	rows, err := db.Query(sqlStmt)
+	stmtBuf := bytes.Buffer{}
+	stmtBuf.WriteString("SELECT * FROM blocktrees WHERE id IN (")
+	for i := range ids {
+		stmtBuf.WriteString("?")
+		if i == len(ids)-1 {
+			stmtBuf.WriteString(")")
+		} else {
+			stmtBuf.WriteString(",")
+		}
+	}
+	var args []any
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	stmt := stmtBuf.String()
+	rows, err := db.Query(stmt, args...)
 	if err != nil {
-		logging.LogErrorf("sql query [%s] failed: %s", sqlStmt, err)
+		logging.LogErrorf("sql query [%s] failed: %s", stmt, err)
 		return
 	}
 	defer rows.Close()

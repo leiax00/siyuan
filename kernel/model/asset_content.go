@@ -63,6 +63,9 @@ func GetAssetContent(id, query string, queryMethod int) (ret *AssetContent) {
 			query = stringQuery(query)
 		}
 	}
+	if !ast.IsNodeIDPattern(id) {
+		return
+	}
 
 	table := "asset_contents_fts_case_insensitive"
 	filter := " id = '" + id + "'"
@@ -384,13 +387,13 @@ func (searcher *AssetsSearcher) FullIndex() {
 	}
 
 	var results []*AssetParseResult
-	filelock.Walk(assetsDir, func(absPath string, info fs.FileInfo, err error) error {
+	filelock.Walk(assetsDir, func(absPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			logging.LogErrorf("walk dir [%s] failed: %s", absPath, err)
 			return err
 		}
 
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
 
@@ -404,6 +407,12 @@ func (searcher *AssetsSearcher) FullIndex() {
 
 		result := parser.Parse(absPath)
 		if nil == result {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			logging.LogErrorf("stat file [%s] failed: %s", absPath, err)
 			return nil
 		}
 
@@ -756,7 +765,7 @@ func (parser *PdfAssetParser) getTextPageWorker(id int, instance pdfium.Pdfium, 
 
 // Parse will parse a PDF document using PDFium webassembly module using a worker pool
 func (parser *PdfAssetParser) Parse(absPath string) (ret *AssetParseResult) {
-	if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container {
+	if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container || util.ContainerHarmony == util.Container {
 		// PDF asset content searching is not supported on mobile platforms
 		return
 	}
@@ -880,7 +889,7 @@ func (parser *PdfAssetParser) Parse(absPath string) (ret *AssetParseResult) {
 		res := <-results
 		pageText[res.pageNo] = res.text
 		if nil != res.err {
-			logging.LogErrorf("convert [%s] of page %d failed: [%s]", tmp, res.pageNo, err)
+			logging.LogErrorf("convert [%s] of page %d failed: [%s]", tmp, res.pageNo, res.err)
 		}
 	}
 	close(results)

@@ -4,7 +4,7 @@ import {Dialog} from "../../dialog";
 import {fetchPost} from "../../util/fetch";
 import {confirmDialog} from "../../dialog/confirmDialog";
 import {showMessage} from "../../dialog/message";
-import {isInAndroid, isInIOS, isIPad, openByMobile, writeText} from "../../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, isInIOS, isIPad, openByMobile, writeText} from "../../protyle/util/compatibility";
 import {exitSiYuan, processSync} from "../../dialog/processSystem";
 import {pathPosix} from "../../util/pathName";
 import {openModel} from "../menu/model";
@@ -40,7 +40,7 @@ export const initAbout = () => {
         <div class="fn__hr"></div>
         <div class="b3-label__text">${window.siyuan.languages.about18}</div>
 </div>
-<div class="b3-label${(window.siyuan.config.readonly || (isBrowser() && !isInIOS() && !isInAndroid() && !isIPad())) ? " fn__none" : ""}">
+<div class="b3-label${(window.siyuan.config.readonly || (isBrowser() && !isInIOS() && !isInAndroid() && !isIPad() && !isInHarmony())) ? " fn__none" : ""}">
     ${window.siyuan.languages.about5}
     <div class="fn__hr"></div>
     <button class="b3-button b3-button--outline fn__block" id="authCode">
@@ -83,6 +83,12 @@ export const initAbout = () => {
         <svg><use xlink:href="#iconTrashcan"></use></svg>${window.siyuan.languages.purge}
     </button>
     <div class="b3-label__text">${window.siyuan.languages.dataRepoPurgeTip}</div>
+    <div class="fn__hr"></div>
+    <input class="b3-text-field fn__block" style="padding-right: 64px;" id="indexRetentionDays" min="1" type="number" class="b3-text-field" value="${window.siyuan.config.repo.indexRetentionDays}">
+    <div class="b3-label__text">${window.siyuan.languages.dataRepoAutoPurgeIndexRetentionDays}</div>
+    <div class="fn__hr"></div>
+    <input class="b3-text-field fn__block" style="padding-right: 64px;" id="retentionIndexesDaily" min="1" type="number" class="b3-text-field" value="${window.siyuan.config.repo.retentionIndexesDaily}">
+    <div class="b3-label__text">${window.siyuan.languages.dataRepoAutoPurgeRetentionIndexesDaily}</div>
 </div>
 <div class="b3-label">
     ${window.siyuan.languages.systemLog}
@@ -111,7 +117,26 @@ export const initAbout = () => {
     </button>
     <div class="b3-label__text">${window.siyuan.languages.importDataTip}</div>
 </div>
-<div class="b3-label${(!window.siyuan.config.readonly && (isInAndroid() || isInIOS())) ? "" : " fn__none"}">
+<div class="b3-label">
+    ${window.siyuan.languages.exportConf}
+    <div class="fn__hr"></div>
+    <button class="b3-button b3-button--outline fn__block" id="exportConf">
+       <svg><use xlink:href="#iconUpload"></use></svg>${window.siyuan.languages.export}
+    </button>
+    <div class="b3-label__text">${window.siyuan.languages.exportConfTip}</div>
+</div>
+<div class="b3-label${window.siyuan.config.readonly ? " fn__none" : ""}">
+    <div class="fn__flex">
+        ${window.siyuan.languages.importConf}
+    </div>
+    <div class="fn__hr"></div>
+    <button class="b3-button b3-button--outline fn__block" style="position: relative">
+        <input id="importConf" class="b3-form__upload" type="file">
+        <svg><use xlink:href="#iconDownload"></use></svg> ${window.siyuan.languages.import}
+    </button>
+    <div class="b3-label__text">${window.siyuan.languages.importConfTip}</div>
+</div>
+<div class="b3-label${(!window.siyuan.config.readonly && (isInAndroid() || isInIOS() || isInHarmony())) ? "" : " fn__none"}">
     ${window.siyuan.languages.workspaceList}
     <div class="fn__hr"></div>
     <button id="openWorkspace" class="b3-button b3-button--outline fn__block">${window.siyuan.languages.openBy}...</button>
@@ -144,7 +169,7 @@ export const initAbout = () => {
         </div>
     </div>
     <div style="color:var(--b3-theme-surface);font-family: cursive;">会泽百家&nbsp;至公天下</div>
-    ${window.siyuan.languages.about1}
+    ${window.siyuan.languages.about1} ${"harmony" === window.siyuan.config.system.container? " • " + window.siyuan.languages.feedback + " 845765@qq.com" : ""}
 </div>
 </div>`,
         bindEvent(modelMainElement: HTMLElement) {
@@ -247,6 +272,13 @@ export const initAbout = () => {
                         event.preventDefault();
                         event.stopPropagation();
                         break;
+                    } else if (target.id === "exportConf") {
+                        fetchPost("/api/system/exportConf", {}, response => {
+                            openByMobile(response.data.zip);
+                        });
+                        event.preventDefault();
+                        event.stopPropagation();
+                        break;
                     } else if (target.id === "exportLog") {
                         fetchPost("/api/system/exportLog", {}, (response) => {
                             openByMobile(response.data.zip);
@@ -330,7 +362,7 @@ export const initAbout = () => {
                             genWorkspace(workspaceDirElement);
                             confirmDialog(window.siyuan.languages.deleteOpConfirm, window.siyuan.languages.removeWorkspacePhysically.replace("${x}", removePath), () => {
                                 fetchPost("/api/system/removeWorkspaceDirPhysically", {path: removePath});
-                            });
+                            }, undefined, true);
                         });
                         event.preventDefault();
                         event.stopPropagation();
@@ -357,6 +389,20 @@ export const initAbout = () => {
                 formData.append("file", event.target.files[0]);
                 fetchPost("/api/import/importData", formData);
             });
+            modelMainElement.querySelector("#importConf").addEventListener("change", (event: InputEvent & {
+                target: HTMLInputElement
+            }) => {
+                const formData = new FormData();
+                formData.append("file", event.target.files[0]);
+                fetchPost("/api/system/importConf", formData, (response) => {
+                    if (response.code !== 0) {
+                        showMessage(response.msg);
+                        return;
+                    }
+
+                    exitSiYuan();
+                });
+            });
             const networkServeElement = modelMainElement.querySelector("#networkServe") as HTMLInputElement;
             networkServeElement.addEventListener("change", () => {
                 fetchPost("/api/system/setNetworkServe", {networkServe: networkServeElement.checked}, () => {
@@ -368,6 +414,18 @@ export const initAbout = () => {
                 fetchPost("/api/system/setAPIToken", {token: tokenElement.value}, () => {
                     window.siyuan.config.api.token = tokenElement.value;
                     modelMainElement.querySelector("#tokenTip").innerHTML = window.siyuan.languages.about14.replace("${token}", window.siyuan.config.api.token);
+                });
+            });
+            const indexRetentionDaysElement = modelMainElement.querySelector("#indexRetentionDays") as HTMLInputElement;
+            indexRetentionDaysElement.addEventListener("change", () => {
+                fetchPost("/api/repo/setRepoIndexRetentionDays", {days: parseInt(indexRetentionDaysElement.value)}, () => {
+                    window.siyuan.config.repo.indexRetentionDays = parseInt(indexRetentionDaysElement.value);
+                });
+            });
+            const retentionIndexesDailyElement = modelMainElement.querySelector("#retentionIndexesDaily") as HTMLInputElement;
+            retentionIndexesDailyElement.addEventListener("change", () => {
+                fetchPost("/api/repo/setRetentionIndexesDaily", {indexes: parseInt(retentionIndexesDailyElement.value)}, () => {
+                    window.siyuan.config.repo.retentionIndexesDaily = parseInt(retentionIndexesDailyElement.value);
                 });
             });
         }

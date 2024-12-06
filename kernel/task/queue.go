@@ -91,7 +91,7 @@ func containTask(task *Task, tasks []*Task) bool {
 			}
 
 			for i, arg := range t.Args {
-				if arg != task.Args[i] {
+				if !reflect.DeepEqual(arg, task.Args[i]) {
 					return false
 				}
 			}
@@ -119,6 +119,7 @@ func getCurrentTasks() (ret []*Task) {
 
 const (
 	RepoCheckout                    = "task.repo.checkout"                 // 从快照中检出
+	RepoAutoPurge                   = "task.repo.autoPurge"                // 自动清理数据仓库
 	DatabaseIndexFull               = "task.database.index.full"           // 重建索引
 	DatabaseIndex                   = "task.database.index"                // 数据库索引
 	DatabaseIndexCommit             = "task.database.index.commit"         // 数据库索引提交
@@ -134,6 +135,7 @@ const (
 	AssetContentDatabaseIndexCommit = "task.asset.database.index.commit"   // 资源文件数据库索引提交
 	CacheVirtualBlockRef            = "task.cache.virtualBlockRef"         // 缓存虚拟块引用
 	ReloadAttributeView             = "task.reload.attributeView"          // 重新加载属性视图
+	ReloadProtyle                   = "task.reload.protyle"                // 重新加载编辑器
 	SetRefDynamicText               = "task.ref.setDynamicText"            // 设置引用的动态锚文本
 	SetDefRefCount                  = "task.def.setRefCount"               // 设置定义的引用计数
 	PushMsg                         = "task.push.msg"                      // 推送消息
@@ -142,6 +144,7 @@ const (
 // uniqueActions 描述了唯一的任务，即队列中只能存在一个在执行的任务。
 var uniqueActions = []string{
 	RepoCheckout,
+	RepoAutoPurge,
 	DatabaseIndexFull,
 	DatabaseIndexCommit,
 	OCRImage,
@@ -151,6 +154,7 @@ var uniqueActions = []string{
 	AssetContentDatabaseIndexFull,
 	AssetContentDatabaseIndexCommit,
 	ReloadAttributeView,
+	ReloadProtyle,
 	SetRefDynamicText,
 	SetDefRefCount,
 }

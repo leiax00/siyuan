@@ -307,7 +307,7 @@ func exportResources(c *gin.Context) {
 	}
 }
 
-func batchExportMd(c *gin.Context) {
+func exportNotebookMd(c *gin.Context) {
 	ret := gulu.Ret.NewResult()
 	defer c.JSON(http.StatusOK, ret)
 
@@ -318,9 +318,31 @@ func batchExportMd(c *gin.Context) {
 
 	notebook := arg["notebook"].(string)
 	p := arg["path"].(string)
-	zipPath := model.BatchExportMarkdown(notebook, p)
+	zipPath := model.ExportNotebookMarkdown(notebook, p)
 	ret.Data = map[string]interface{}{
 		"name": path.Base(zipPath),
+		"zip":  zipPath,
+	}
+}
+
+func exportMds(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+
+	idsArg := arg["ids"].([]interface{})
+	var ids []string
+	for _, id := range idsArg {
+		ids = append(ids, id.(string))
+	}
+
+	name, zipPath := model.BatchExportPandocConvertZip(ids, "", ".md")
+	ret.Data = map[string]interface{}{
+		"name": name,
 		"zip":  zipPath,
 	}
 }
@@ -580,10 +602,9 @@ func exportPreview(c *gin.Context) {
 	}
 
 	id := arg["id"].(string)
-	stdHTML, outline := model.Preview(id)
+	stdHTML := model.Preview(id)
 	ret.Data = map[string]interface{}{
-		"html":    stdHTML,
-		"outline": outline,
+		"html": stdHTML,
 	}
 }
 

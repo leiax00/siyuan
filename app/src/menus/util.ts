@@ -9,7 +9,7 @@ import {Constants} from "../constants";
 import {openNewWindowById} from "../window/openNewWindow";
 import {MenuItem} from "./Menu";
 import {App} from "../index";
-import {isInAndroid, openByMobile, updateHotkeyTip} from "../protyle/util/compatibility";
+import {isInAndroid, isInHarmony, openByMobile, updateHotkeyTip} from "../protyle/util/compatibility";
 import {checkFold} from "../util/noRelyPCFunction";
 
 export const exportAsset = (src: string) => {
@@ -33,9 +33,10 @@ export const exportAsset = (src: string) => {
     };
 };
 
-export const openEditorTab = (app: App, ids: string[], notebookId?: string, pathString?: string) => {
+export const openEditorTab = (app: App, ids: string[], notebookId?: string, pathString?: string, onlyGetMenus = false) => {
     /// #if !MOBILE
     const openSubmenus: IMenu[] = [{
+        id: "insertRight",
         icon: "iconLayoutRight",
         label: window.siyuan.languages.insertRight,
         accelerator: ids.length === 1 ? `${updateHotkeyTip(window.siyuan.config.keymap.editor.general.insertRight.custom)}/${updateHotkeyTip("⌥" + window.siyuan.languages.click)}` : undefined,
@@ -62,6 +63,7 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
             }
         }
     }, {
+        id: "insertBottom",
         icon: "iconLayoutBottom",
         label: window.siyuan.languages.insertBottom,
         accelerator: ids.length === 1 ? "⇧" + window.siyuan.languages.click : "",
@@ -90,6 +92,7 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
     }];
     if (window.siyuan.config.fileTree.openFilesUseCurrentTab) {
         openSubmenus.push({
+            id: "openInNewTab",
             label: window.siyuan.languages.openInNewTab,
             accelerator: ids.length === 1 ? "⌥⌘" + window.siyuan.languages.click : undefined,
             click: () => {
@@ -118,17 +121,17 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
     }
     /// #if !BROWSER
     openSubmenus.push({
+        id: "openByNewWindow",
         label: window.siyuan.languages.openByNewWindow,
         icon: "iconOpenWindow",
         click() {
-            ids.forEach((id) => {
-                openNewWindowById(id);
-            });
+            openNewWindowById(ids);
         }
     });
     /// #endif
-    openSubmenus.push({type: "separator"});
+    openSubmenus.push({id: "separator_1", type: "separator"});
     openSubmenus.push({
+        id: "preview",
         icon: "iconPreview",
         label: window.siyuan.languages.preview,
         click: () => {
@@ -138,8 +141,9 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
         }
     });
     /// #if !BROWSER
-    openSubmenus.push({type: "separator"});
+    openSubmenus.push({id: "separator_2", type: "separator"});
     openSubmenus.push({
+        id: "showInFolder",
         icon: "iconFolder",
         label: window.siyuan.languages.showInFolder,
         click: () => {
@@ -155,7 +159,11 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
         }
     });
     /// #endif
+    if (onlyGetMenus) {
+        return openSubmenus;
+    }
     window.siyuan.menus.menu.append(new MenuItem({
+        id: "openBy",
         label: window.siyuan.languages.openBy,
         icon: "iconOpen",
         submenu: openSubmenus,
@@ -163,9 +171,12 @@ export const openEditorTab = (app: App, ids: string[], notebookId?: string, path
     /// #endif
 };
 
-export const copyPNGByLink = (link:string) => {
+export const copyPNGByLink = (link: string) => {
     if (isInAndroid()) {
         window.JSAndroid.writeImageClipboard(link);
+        return;
+    } else if (isInHarmony()) {
+        window.JSHarmony.writeImageClipboard(link);
         return;
     } else {
         const canvas = document.createElement("canvas");

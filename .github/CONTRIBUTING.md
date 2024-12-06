@@ -7,17 +7,17 @@
 
 ## User Interface
 
-Install pnpm: `npm install -g pnpm@9.1.1`
+Install pnpm: `npm install -g pnpm@9.12.1`
 
 <details>
 <summary>For China mainland</summary>
 
 Set the Electron mirror environment variable and install Electron:
 
-* macOS/Linux: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v30.4.0 -D`
+* macOS/Linux: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v32.2.5 -D`
 * Windows:
     * `SET ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
-    * `pnpm install electron@v30.4.0 -D`
+    * `pnpm install electron@v32.2.5 -D`
 
 NPM mirror:
 
@@ -28,7 +28,7 @@ NPM mirror:
 
 On the desktop, go to the app folder to run:
 
-* `pnpm install electron@v30.4.0 -D`
+* `pnpm install electron@v32.2.5 -D`
 * `pnpm run dev`
 * `pnpm run start`
 
@@ -58,4 +58,10 @@ Note: In the development environment, the kernel process will not be automatical
 * `gomobile bind --tags fts5 -ldflags '-s -w' -v -o kernel.aar -target='android/arm64' -androidapi 24 ./mobile/`
 * https://github.com/siyuan-note/siyuan-android
 
-For the mobile-end, please refer to the corresponding project repository.
+### Harmony
+
+Only support compilation under Linux, need to install Harmony SDK, and need to modify Go source code, please refer to https://github.com/siyuan-note/siyuan/issues/13184
+
+* `cd kernel/harmony`
+* `./build.sh` (`./build-win.sh` for Windows Emulator)
+* https://github.com/siyuan-note/siyuan-harmony

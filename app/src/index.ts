@@ -17,7 +17,9 @@ import {
     progressBackgroundTask,
     progressLoading,
     progressStatus,
-    reloadSync, setDefRefCount, setRefDynamicText,
+    reloadSync,
+    setDefRefCount,
+    setRefDynamicText,
     setTitle,
     transactionError
 } from "./dialog/processSystem";
@@ -77,7 +79,7 @@ export class App {
                                 reloadSync(this, data.data);
                                 break;
                             case "reloaddoc":
-                                reloadSync(this, {upsertRootIDs: [data.data], removeRootIDs: []}, false, false);
+                                reloadSync(this, {upsertRootIDs: [data.data], removeRootIDs: []}, false, false, true);
                                 break;
                             case "readonly":
                                 window.siyuan.config.editor.readOnly = data.data;
@@ -166,6 +168,7 @@ export class App {
             addScriptSync(`${Constants.PROTYLE_CDN}/js/lute/lute.min.js?v=${Constants.SIYUAN_VERSION}`, "protyleLuteScript");
             addScript(`${Constants.PROTYLE_CDN}/js/protyle-html.js?v=${Constants.SIYUAN_VERSION}`, "protyleWcHtmlScript");
             window.siyuan.config = response.data.conf;
+            window.siyuan.isPublish = response.data.isPublish;
             await loadPlugins(this);
             getLocalStorage(() => {
                 fetchGet(`/appearance/langs/${window.siyuan.config.appearance.lang}.json?v=${Constants.SIYUAN_VERSION}`, (lauguages: IObject) => {

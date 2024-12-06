@@ -1,7 +1,7 @@
 type TPluginDockPosition = "LeftTop" | "LeftBottom" | "RightTop" | "RightBottom" | "BottomLeft" | "BottomRight"
 type TDockPosition = "Left" | "Right" | "Bottom"
 type TWS = "main" | "filetree" | "protyle"
-type TEditorMode = "preview" | "wysiwyg"
+type TDock = "file" | "outline" | "inbox" | "bookmark" | "tag" | "graph" | "globalGraph" | "backlink"
 type TOperation =
     "insert"
     | "update"
@@ -53,6 +53,8 @@ type TOperation =
     | "hideAttrViewName"
     | "setAttrViewColDate"
     | "unbindAttrViewBlock"
+    | "setAttrViewViewDesc"
+    | "setAttrViewColDesc"
 type TBazaarType = "templates" | "icons" | "widgets" | "themes" | "plugins"
 type TCardType = "doc" | "notebook" | "all"
 type TEventBus = "ws-main" | "sync-start" | "sync-end" | "sync-fail" |
@@ -60,10 +62,11 @@ type TEventBus = "ws-main" | "sync-start" | "sync-end" | "sync-fail" |
     "open-noneditableblock" |
     "open-menu-blockref" | "open-menu-fileannotationref" | "open-menu-tag" | "open-menu-link" | "open-menu-image" |
     "open-menu-av" | "open-menu-content" | "open-menu-breadcrumbmore" | "open-menu-doctree" | "open-menu-inbox" |
-    "open-siyuan-url-plugin" | "open-siyuan-url-block" |
+    "open-siyuan-url-plugin" | "open-siyuan-url-block" | "opened-notebook" |
+    "closed-notebook" |
     "paste" |
     "input-search" |
-    "loaded-protyle" | "loaded-protyle-dynamic" | "loaded-protyle-static" |
+    "loaded-protyle-dynamic" | "loaded-protyle-static" |
     "switch-protyle" |
     "destroy-protyle" |
     "lock-screen" |
@@ -104,7 +107,22 @@ type TAVFilterOperator =
     | "Is relative to today"
     | "Is true"
     | "Is false"
+
 declare module "blueimp-md5"
+
+declare class Highlight {
+    constructor(...range: Range[]);
+
+    add(range: Range): void
+
+    clear(): void
+
+    forEach(callbackfn: (value: Range, key: number) => void): void;
+}
+
+declare namespace CSS {
+    const highlights: Map<string, Highlight>;
+}
 
 interface Window {
     echarts: {
@@ -175,6 +193,15 @@ interface Window {
         readClipboard(): string
         getBlockURL(): string
     }
+    JSHarmony: {
+        openExternal(url: string): void
+        changeStatusBarColor(color: string, mode: number): void
+        writeClipboard(text: string): void
+        writeHTMLClipboard(text: string, html: string): void
+        writeImageClipboard(uri: string): void
+        readClipboard(): string
+        getBlockURL(): string
+    }
 
     Protyle: import("../protyle/method").default
 
@@ -191,6 +218,11 @@ interface Window {
     destroyTheme(): Promise<void>
 }
 
+interface filesPath {
+    notebookId: string,
+    openPaths: string[]
+}
+
 interface IPosition {
     x: number,
     y: number,
@@ -203,6 +235,7 @@ interface ISaveLayout {
     name: string,
     layout: IObject
     time: number
+    filesPaths: filesPath[]
 }
 
 interface IWorkspace {
@@ -310,7 +343,7 @@ interface IBackStack {
         notebookId: string
     },
     scrollTop?: number,
-    callback?: string[],
+    callback?: TProtyleAction[],
     position?: {
         start: number,
         end: number
@@ -369,7 +402,14 @@ interface ISiyuan {
     mobile?: {
         editor?: import("../protyle").Protyle
         popEditor?: import("../protyle").Protyle
-        files?: import("../mobile/dock/MobileFiles").MobileFiles
+        docks?: {
+            outline: import("../mobile/dock/MobileOutline").MobileOutline | null,
+            file: import("../mobile/dock/MobileFiles").MobileFiles | null,
+            bookmark: import("../mobile/dock/MobileBookmarks").MobileBookmarks | null,
+            tag: import("../mobile/dock/MobileTags").MobileTags | null,
+            backlink: import("../mobile/dock/MobileBacklinks").MobileBacklinks | null,
+            inbox: import("../layout/dock/Inbox").Inbox | null,
+        } & { [key: string]: import("../layout/Model").Model | any };
     },
     user?: {
         userId: string
@@ -418,18 +458,11 @@ interface ISiyuan {
     bookmarkLabel?: string[]
     blockPanels: import("../block/Panel").BlockPanel[],
     dialogs: import("../dialog").Dialog[],
-    viewer?: Viewer
-}
-
-interface IScrollAttr {
-    rootId: string,
-    startId: string,
-    endId: string
-    scrollTop: number,
-    focusId?: string,
-    focusStart?: number
-    focusEnd?: number
-    zoomInId?: string
+    viewer?: Viewer,
+    /**
+     * 是否在发布服务下访问
+     */
+    isPublish?: boolean;
 }
 
 interface IOperation {
@@ -455,6 +488,7 @@ interface IOperation {
     type?: TAVCol // addAttrViewCol 专享
     deckID?: string // add/removeFlashcards 专享
     blockIDs?: string[] // add/removeFlashcards 专享
+    removeDest?: boolean // removeAttrViewCol 专享
 }
 
 interface IOperationSrcs {
@@ -547,11 +581,11 @@ interface IOpenFileOptions {
     position?: string, // file 或者 asset，打开位置
     page?: number | string, // asset
     mode?: TEditorMode // file
-    action?: string[]
+    action?: TProtyleAction[]
     keepCursor?: boolean // file，是否跳转到新 tab 上
     zoomIn?: boolean // 是否缩放
     removeCurrentTab?: boolean // 在当前页签打开时需移除原有页签
-    afterOpen?: () => void // 打开后回调
+    afterOpen?: (model?: import("../layout/Model").Model) => void // 打开后回调
 }
 
 interface ILayoutOptions {
@@ -661,6 +695,7 @@ interface IBlock {
     name?: string;
     memo?: string;
     alias?: string;
+    tag?: string;
     refs?: IBlock[];
     children?: IBlock[]
     length?: number
@@ -704,6 +739,7 @@ interface IMenu {
     index?: number
     element?: HTMLElement
     ignore?: boolean
+    warning?: boolean
 }
 
 interface IBazaarItem {
@@ -747,10 +783,12 @@ interface IAV {
 
 interface IAVView {
     name: string
+    desc: string
     id: string
     type: string
     icon: string
     hideAttrViewName: boolean
+    pageSize: number
 }
 
 interface IAVTable extends IAVView {
@@ -786,6 +824,7 @@ interface IAVColumn {
     icon: string,
     id: string,
     name: string,
+    desc: string,
     wrap: boolean,
     pin: boolean,
     hidden: boolean,
@@ -800,6 +839,7 @@ interface IAVColumn {
     options?: {
         name: string,
         color: string,
+        desc?: string,
     }[],
     relation?: IAVColumnRelation,
     rollup?: IAVCellRollupValue

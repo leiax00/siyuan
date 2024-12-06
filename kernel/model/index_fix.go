@@ -18,6 +18,7 @@ package model
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -49,37 +50,31 @@ func checkIndex() {
 	checkIndexOnce.Do(func() {
 		logging.LogInfof("start checking index...")
 
-		task.AppendTask(task.DatabaseIndexFix, removeDuplicateDatabaseIndex)
-		sql.WaitForWritingDatabase()
+		removeDuplicateDatabaseIndex()
+		sql.FlushQueue()
 
-		task.AppendTask(task.DatabaseIndexFix, resetDuplicateBlocksOnFileSys)
+		resetDuplicateBlocksOnFileSys()
+		sql.FlushQueue()
 
-		task.AppendTask(task.DatabaseIndexFix, fixBlockTreeByFileSys)
-		sql.WaitForWritingDatabase()
+		fixBlockTreeByFileSys()
+		sql.FlushQueue()
 
-		task.AppendTask(task.DatabaseIndexFix, fixDatabaseIndexByBlockTree)
-		sql.WaitForWritingDatabase()
+		fixDatabaseIndexByBlockTree()
+		sql.FlushQueue()
 
-		task.AppendTask(task.DatabaseIndexFix, removeDuplicateDatabaseRefs)
+		removeDuplicateDatabaseRefs()
 
 		// 后面要加任务的话记得修改推送任务栏的进度 util.PushStatusBar(fmt.Sprintf(Conf.Language(58), 1, 5))
 
-		task.AppendTask(task.DatabaseIndexFix, func() {
-			util.PushStatusBar(Conf.Language(185))
-		})
 		debug.FreeOSMemory()
+		util.PushStatusBar(Conf.Language(185))
 		logging.LogInfof("finish checking index")
 	})
 }
 
-var autoFixLock = sync.Mutex{}
-
 // removeDuplicateDatabaseRefs 删除重复的数据库引用关系。
 func removeDuplicateDatabaseRefs() {
 	defer logging.Recover()
-
-	autoFixLock.Lock()
-	defer autoFixLock.Unlock()
 
 	util.PushStatusBar(fmt.Sprintf(Conf.Language(58), 5, 5))
 	duplicatedRootIDs := sql.GetRefDuplicatedDefRootIDs()
@@ -95,9 +90,6 @@ func removeDuplicateDatabaseRefs() {
 // removeDuplicateDatabaseIndex 删除重复的数据库索引。
 func removeDuplicateDatabaseIndex() {
 	defer logging.Recover()
-
-	autoFixLock.Lock()
-	defer autoFixLock.Unlock()
 
 	util.PushStatusBar(fmt.Sprintf(Conf.Language(58), 1, 5))
 	duplicatedRootIDs := sql.GetDuplicatedRootIDs("blocks")
@@ -142,9 +134,6 @@ func removeDuplicateDatabaseIndex() {
 func resetDuplicateBlocksOnFileSys() {
 	defer logging.Recover()
 
-	autoFixLock.Lock()
-	defer autoFixLock.Unlock()
-
 	util.PushStatusBar(fmt.Sprintf(Conf.Language(58), 2, 5))
 	boxes := Conf.GetBoxes()
 	luteEngine := lute.New()
@@ -163,22 +152,22 @@ func resetDuplicateBlocksOnFileSys() {
 
 		boxPath := filepath.Join(util.DataDir, box.ID)
 		var duplicatedTrees []*parse.Tree
-		filelock.Walk(boxPath, func(path string, info os.FileInfo, err error) error {
-			if nil == info {
+		filelock.Walk(boxPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || nil == d {
 				return nil
 			}
 
-			if info.IsDir() {
+			if d.IsDir() {
 				if boxPath == path {
 					// 跳过笔记本文件夹
 					return nil
 				}
 
-				if strings.HasPrefix(info.Name(), ".") {
+				if strings.HasPrefix(d.Name(), ".") {
 					return filepath.SkipDir
 				}
 
-				if !ast.IsNodeIDPattern(info.Name()) {
+				if !ast.IsNodeIDPattern(d.Name()) {
 					return nil
 				}
 				return nil
@@ -188,7 +177,7 @@ func resetDuplicateBlocksOnFileSys() {
 				return nil
 			}
 
-			if !ast.IsNodeIDPattern(strings.TrimSuffix(info.Name(), ".sy")) {
+			if !ast.IsNodeIDPattern(strings.TrimSuffix(d.Name(), ".sy")) {
 				logging.LogWarnf("invalid .sy file name [%s]", path)
 				box.moveCorruptedData(path)
 				return nil
@@ -239,7 +228,7 @@ func resetDuplicateBlocksOnFileSys() {
 
 			if needOverwrite {
 				logging.LogWarnf("exist more than one node with the same id in tree [%s], reset it", box.ID+p)
-				if writeErr := filesys.WriteTree(tree); nil != writeErr {
+				if _, writeErr := filesys.WriteTree(tree); nil != writeErr {
 					logging.LogErrorf("write tree [%s] failed: %s", p, writeErr)
 				}
 			}
@@ -266,7 +255,7 @@ func recreateTree(tree *parse.Tree, absPath string) {
 	treenode.RemoveBlockTreesByRootID(tree.ID)
 
 	resetTree(tree, "", true)
-	if err := filesys.WriteTree(tree); err != nil {
+	if _, err := filesys.WriteTree(tree); err != nil {
 		logging.LogWarnf("write tree [%s] failed: %s", tree.Path, err)
 		return
 	}
@@ -291,27 +280,24 @@ func recreateTree(tree *parse.Tree, absPath string) {
 func fixBlockTreeByFileSys() {
 	defer logging.Recover()
 
-	autoFixLock.Lock()
-	defer autoFixLock.Unlock()
-
 	util.PushStatusBar(fmt.Sprintf(Conf.Language(58), 3, 5))
 	boxes := Conf.GetOpenedBoxes()
 	luteEngine := lute.New()
 	for _, box := range boxes {
 		boxPath := filepath.Join(util.DataDir, box.ID)
 		var paths []string
-		filelock.Walk(boxPath, func(path string, info os.FileInfo, err error) error {
+		filelock.Walk(boxPath, func(path string, d fs.DirEntry, err error) error {
+			if nil != err || nil == d {
+				return nil
+			}
+
 			if boxPath == path {
 				// 跳过根路径（笔记本文件夹）
 				return nil
 			}
 
-			if nil == info {
-				return nil
-			}
-
-			if info.IsDir() {
-				if strings.HasPrefix(info.Name(), ".") {
+			if d.IsDir() {
+				if strings.HasPrefix(d.Name(), ".") {
 					return filepath.SkipDir
 				}
 				return nil

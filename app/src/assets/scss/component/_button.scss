@@ -61,13 +61,12 @@
   &--big {
     min-width: 214px;
     background: var(--b3-theme-secondary);
-    color:var(--b3-theme-on-secondary);
+    color: var(--b3-theme-on-secondary);
     padding: 24px 16px;
     font-size: 16px;
   }
 
-  &--text,
-  &--cancel {
+  &--text {
     color: var(--b3-theme-primary);
     background-color: transparent;
 
@@ -85,6 +84,18 @@
 
   &--cancel {
     color: var(--b3-theme-on-surface);
+    background-color: transparent;
+
+    &:hover,
+    &:focus {
+      background-color: var(--b3-list-hover);
+      box-shadow: none;
+    }
+
+    &:active {
+      background-color: var(--b3-list-icon-hover);
+      box-shadow: none;
+    }
   }
 
   &--outline {
@@ -101,6 +112,23 @@
     &:active {
       background-color: var(--b3-theme-primary-lighter);
       box-shadow: inset 0 0 0 1px var(--b3-theme-primary);
+    }
+  }
+
+  &--remove {
+    color: var(--b3-theme-error);
+    box-shadow: inset 0 0 0 .6px var(--b3-theme-error);
+    background-color: transparent;
+
+    &:hover,
+    &:focus {
+      background-color: var(--b3-card-error-background);
+      box-shadow: inset 0 0 0 1px var(--b3-theme-error);
+    }
+
+    &:active {
+      background-color: var(--b3-card-error-background);
+      box-shadow: inset 0 0 0 1px var(--b3-theme-error);
     }
   }
 

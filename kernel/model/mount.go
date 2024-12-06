@@ -35,7 +35,7 @@ import (
 )
 
 func CreateBox(name string) (id string, err error) {
-	name = gulu.Str.RemoveInvisible(name)
+	name = util.RemoveInvalid(name)
 	if 512 < utf8.RuneCountInString(name) {
 		// 限制笔记本名和文档名最大长度为 `512` https://github.com/siyuan-note/siyuan/issues/6299
 		err = errors.New(Conf.Language(106))
@@ -45,7 +45,7 @@ func CreateBox(name string) (id string, err error) {
 		name = Conf.language(105)
 	}
 
-	WaitForWritingFiles()
+	FlushTxQueue()
 
 	createDocLock.Lock()
 	defer createDocLock.Unlock()
@@ -106,7 +106,7 @@ func RemoveBox(boxID string) (err error) {
 		return errors.New(fmt.Sprintf("can not remove [%s] caused by it is a reserved file", boxID))
 	}
 
-	WaitForWritingFiles()
+	FlushTxQueue()
 	isUserGuide := IsUserGuide(boxID)
 	createDocLock.Lock()
 	defer createDocLock.Unlock()
@@ -147,7 +147,7 @@ func RemoveBox(boxID string) (err error) {
 }
 
 func Unmount(boxID string) {
-	WaitForWritingFiles()
+	FlushTxQueue()
 
 	unmount0(boxID)
 	evt := util.NewCmdResult("unmount", 0, util.PushModeBroadcast)
@@ -178,7 +178,7 @@ func Mount(boxID string) (alreadyMount bool, err error) {
 	boxLock.Store(boxID, true)
 	defer boxLock.Delete(boxID)
 
-	WaitForWritingFiles()
+	FlushTxQueue()
 	isUserGuide := IsUserGuide(boxID)
 
 	localPath := filepath.Join(util.DataDir, boxID)

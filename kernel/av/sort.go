@@ -44,7 +44,14 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 	switch value.Type {
 	case KeyTypeBlock:
 		if nil != value.Block && nil != other.Block {
-			return strings.Compare(value.Block.Content, other.Block.Content)
+			if 0 == strings.Compare(value.Block.Content, other.Block.Content) {
+				return 0
+			}
+
+			if util.PinYinCompare(value.Block.Content, other.Block.Content) {
+				return -1
+			}
+			return 1
 		}
 	case KeyTypeText:
 		if nil != value.Text && nil != other.Text {
@@ -56,7 +63,15 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 			} else if "" == other.Text.Content {
 				return -1
 			}
-			return strings.Compare(value.Text.Content, other.Text.Content)
+
+			if 0 == strings.Compare(value.Text.Content, other.Text.Content) {
+				return 0
+			}
+
+			if util.PinYinCompare(value.Text.Content, other.Text.Content) {
+				return -1
+			}
+			return 1
 		}
 	case KeyTypeNumber:
 		if nil != value.Number && nil != other.Number {
@@ -223,7 +238,15 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 			for _, v := range other.MAsset {
 				v2 += v.Content
 			}
-			return strings.Compare(v1, v2)
+
+			if 0 == strings.Compare(v1, v2) {
+				return 0
+			}
+
+			if util.PinYinCompare(v1, v2) {
+				return -1
+			}
+			return 1
 		}
 	case KeyTypeTemplate:
 		if nil != value.Template && nil != other.Template {
@@ -238,7 +261,15 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 				}
 				return 0
 			}
-			return strings.Compare(value.Template.Content, other.Template.Content)
+
+			if 0 == strings.Compare(value.Template.Content, other.Template.Content) {
+				return 0
+			}
+
+			if util.PinYinCompare(value.Template.Content, other.Template.Content) {
+				return -1
+			}
+			return 1
 		}
 	case KeyTypeCheckbox:
 		if nil != value.Checkbox && nil != other.Checkbox {
@@ -278,7 +309,15 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 				oContentBuf.WriteByte(' ')
 			}
 			oContent := strings.TrimSpace(oContentBuf.String())
-			return strings.Compare(vContent, oContent)
+
+			if 0 == strings.Compare(vContent, oContent) {
+				return 0
+			}
+
+			if util.PinYinCompare(vContent, oContent) {
+				return -1
+			}
+			return 1
 		}
 	case KeyTypeRollup:
 		if nil != value.Rollup && nil != other.Rollup {
@@ -308,7 +347,15 @@ func (value *Value) Compare(other *Value, attrView *AttributeView) int {
 				oContentBuf.WriteByte(' ')
 			}
 			oContent := strings.TrimSpace(oContentBuf.String())
-			return strings.Compare(vContent, oContent)
+
+			if 0 == strings.Compare(vContent, oContent) {
+				return 0
+			}
+
+			if util.PinYinCompare(vContent, oContent) {
+				return -1
+			}
+			return 1
 		}
 	}
 	return 0

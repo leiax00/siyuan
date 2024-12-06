@@ -34,7 +34,6 @@ import (
 	"github.com/88250/lute/editor"
 	"github.com/88250/lute/lex"
 	"github.com/88250/lute/parse"
-	"github.com/emirpasic/gods/sets/hashset"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/av"
@@ -57,19 +56,10 @@ func IsMoveOutlineHeading(transactions *[]*Transaction) bool {
 	return false
 }
 
-func WaitForWritingFiles() {
-	var printLog bool
-	var lastPrintLog bool
-	for i := 0; isWritingFiles(); i++ {
-		time.Sleep(5 * time.Millisecond)
-		if 2000 < i && !printLog { // 10s 后打日志
-			logging.LogWarnf("file is writing: \n%s", logging.ShortStack())
-			printLog = true
-		}
-		if 12000 < i && !lastPrintLog { // 60s 后打日志
-			logging.LogWarnf("file is still writing")
-			lastPrintLog = true
-		}
+func FlushTxQueue() {
+	time.Sleep(time.Duration(50) * time.Millisecond)
+	for 0 < len(txQueue) || isFlushing {
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -79,20 +69,17 @@ var (
 	isFlushing = false
 )
 
-func isWritingFiles() bool {
-	time.Sleep(time.Duration(50) * time.Millisecond)
-	return 0 < len(txQueue) || isFlushing
+func init() {
+	go flushQueue()
 }
 
-func init() {
-	go func() {
-		for {
-			select {
-			case tx := <-txQueue:
-				flushTx(tx)
-			}
+func flushQueue() {
+	for {
+		select {
+		case tx := <-txQueue:
+			flushTx(tx)
 		}
-	}()
+	}
 }
 
 func flushTx(tx *Transaction) {
@@ -229,6 +216,8 @@ func performTx(tx *Transaction) (ret *TxErr) {
 			ret = tx.doSetAttrViewColumnPin(op)
 		case "setAttrViewColIcon":
 			ret = tx.doSetAttrViewColumnIcon(op)
+		case "setAttrViewColDesc":
+			ret = tx.doSetAttrViewColumnDesc(op)
 		case "insertAttrViewBlock":
 			ret = tx.doInsertAttrViewBlock(op)
 		case "removeAttrViewBlock":
@@ -253,6 +242,8 @@ func performTx(tx *Transaction) (ret *TxErr) {
 			ret = tx.doRemoveAttrViewColOption(op)
 		case "updateAttrViewColOption":
 			ret = tx.doUpdateAttrViewColOption(op)
+		case "setAttrViewColOptionDesc":
+			ret = tx.doSetAttrViewColOptionDesc(op)
 		case "setAttrViewColCalc":
 			ret = tx.doSetAttrViewColCalc(op)
 		case "updateAttrViewColNumberFormat":
@@ -269,6 +260,8 @@ func performTx(tx *Transaction) (ret *TxErr) {
 			ret = tx.doSetAttrViewViewName(op)
 		case "setAttrViewViewIcon":
 			ret = tx.doSetAttrViewViewIcon(op)
+		case "setAttrViewViewDesc":
+			ret = tx.doSetAttrViewViewDesc(op)
 		case "duplicateAttrViewView":
 			ret = tx.doDuplicateAttrViewView(op)
 		case "sortAttrViewView":
@@ -365,6 +358,10 @@ func (tx *Transaction) doMove(operation *Operation) (ret *TxErr) {
 			return
 		}
 
+		if isMovingParentIntoChild(srcNode, targetNode) {
+			return
+		}
+
 		for i := len(headingChildren) - 1; -1 < i; i-- {
 			c := headingChildren[i]
 			targetNode.InsertAfter(c)
@@ -384,6 +381,8 @@ func (tx *Transaction) doMove(operation *Operation) (ret *TxErr) {
 			if err = tx.writeTree(targetTree); err != nil {
 				return
 			}
+			task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, srcTree.ID, srcTree.ID)
+			task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, targetTree.ID, srcNode.ID)
 		}
 		return
 	}
@@ -409,6 +408,10 @@ func (tx *Transaction) doMove(operation *Operation) (ret *TxErr) {
 	}
 
 	if isMovingFoldHeadingIntoSelf(targetNode, headingChildren) {
+		return
+	}
+
+	if isMovingParentIntoChild(srcNode, targetNode) {
 		return
 	}
 
@@ -463,6 +466,8 @@ func (tx *Transaction) doMove(operation *Operation) (ret *TxErr) {
 		if err = tx.writeTree(targetTree); err != nil {
 			return &TxErr{code: TxErrCodeWriteTree, msg: err.Error(), id: id}
 		}
+		task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, srcTree.ID, srcTree.ID)
+		task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, targetTree.ID, srcNode.ID)
 	}
 	return
 }
@@ -471,6 +476,15 @@ func isMovingFoldHeadingIntoSelf(targetNode *ast.Node, headingChildren []*ast.No
 	for _, headingChild := range headingChildren {
 		if headingChild.ID == targetNode.ID {
 			// 不能将折叠标题移动到自己下方节点的前或后 https://github.com/siyuan-note/siyuan/issues/7163
+			return true
+		}
+	}
+	return false
+}
+
+func isMovingParentIntoChild(srcNode, targetNode *ast.Node) bool {
+	for parent := targetNode.Parent; nil != parent; parent = parent.Parent {
+		if parent.ID == srcNode.ID {
 			return true
 		}
 	}
@@ -760,13 +774,12 @@ func (tx *Transaction) doDelete(operation *Operation) (ret *TxErr) {
 	// 收集引用的定义块 ID
 	refDefIDs := getRefDefIDs(node)
 	// 推送定义节点引用计数
-	refDefIDs = gulu.Str.RemoveDuplicatedElem(refDefIDs)
 	for _, defID := range refDefIDs {
 		defTree, _ := LoadTreeByBlockID(defID)
 		if nil != defTree {
 			defNode := treenode.GetNodeInTree(defTree, defID)
 			if nil != defNode {
-				task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, pushSetDefRefCount, defTree.ID, defNode.ID)
+				task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, defTree.ID, defNode.ID)
 			}
 		}
 	}
@@ -817,14 +830,14 @@ func (tx *Transaction) doDelete(operation *Operation) (ret *TxErr) {
 	}
 
 	if needSyncDel2AvBlock {
-		syncDelete2AvBlock(node)
+		syncDelete2AvBlock(node, tree, tx)
 	}
 	return
 }
 
-func syncDelete2AvBlock(node *ast.Node) {
+func syncDelete2AvBlock(node *ast.Node, nodeTree *parse.Tree, tx *Transaction) {
 	changedAvIDs := syncDelete2AttributeView(node)
-	avIDs := syncDelete2Block(node)
+	avIDs := tx.syncDelete2Block(node, nodeTree)
 	changedAvIDs = append(changedAvIDs, avIDs...)
 	changedAvIDs = gulu.Str.RemoveDuplicatedElem(changedAvIDs)
 
@@ -833,7 +846,7 @@ func syncDelete2AvBlock(node *ast.Node) {
 	}
 }
 
-func syncDelete2Block(node *ast.Node) (changedAvIDs []string) {
+func (tx *Transaction) syncDelete2Block(node *ast.Node, nodeTree *parse.Tree) (changedAvIDs []string) {
 	ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 		if !entering || ast.NodeAttributeView != n.Type {
 			return ast.WalkContinue
@@ -855,7 +868,7 @@ func syncDelete2Block(node *ast.Node) (changedAvIDs []string) {
 			return ast.WalkContinue
 		}
 
-		trees, nodes := getAttrViewBoundNodes(attrView)
+		trees, nodes := tx.getAttrViewBoundNodes(attrView)
 		for _, toChangNode := range nodes {
 			avs := toChangNode.IALAttr(av.NodeAttrNameAvs)
 			if "" != avs {
@@ -872,8 +885,13 @@ func syncDelete2Block(node *ast.Node) (changedAvIDs []string) {
 			toChangNode.SetIALAttr(av.NodeAttrViewNames, avNames)
 			pushBroadcastAttrTransactions(oldAttrs, toChangNode)
 		}
+
+		nodeTreeID := nodeTree.ID
 		for _, tree := range trees {
-			indexWriteTreeUpsertQueue(tree)
+			self := nodeTreeID == tree.ID
+			if !self {
+				indexWriteTreeUpsertQueue(tree)
+			}
 		}
 		return ast.WalkContinue
 	})
@@ -1079,13 +1097,12 @@ func (tx *Transaction) doInsert(operation *Operation) (ret *TxErr) {
 	// 收集引用的定义块 ID
 	refDefIDs := getRefDefIDs(insertedNode)
 	// 推送定义节点引用计数
-	refDefIDs = gulu.Str.RemoveDuplicatedElem(refDefIDs)
 	for _, defID := range refDefIDs {
 		defTree, _ := LoadTreeByBlockID(defID)
 		if nil != defTree {
 			defNode := treenode.GetNodeInTree(defTree, defID)
 			if nil != defNode {
-				task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, pushSetDefRefCount, defTree.ID, defNode.ID)
+				task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, defTree.ID, defNode.ID)
 			}
 		}
 	}
@@ -1104,6 +1121,19 @@ func (tx *Transaction) doInsert(operation *Operation) (ret *TxErr) {
 			"isDetached": false,
 		}}, avID, "", previousID, false)
 		ReloadAttrView(avID)
+	}
+
+	// 插入数据库块时需要重新绑定其中已经存在的块
+	// 比如剪切操作时，会先进行 delete 数据库解绑块，这里需要重新绑定 https://github.com/siyuan-note/siyuan/issues/13031
+	if ast.NodeAttributeView == insertedNode.Type {
+		attrView, parseErr := av.ParseAttributeView(insertedNode.AttributeViewID)
+		if nil == parseErr {
+			trees, toBindNodes := tx.getAttrViewBoundNodes(attrView)
+			for _, toBindNode := range toBindNodes {
+				t := trees[toBindNode.ID]
+				bindBlockAv0(tx, insertedNode.AttributeViewID, toBindNode, t)
+			}
+		}
 	}
 
 	operation.ID = insertedNode.ID
@@ -1183,7 +1213,7 @@ func (tx *Transaction) doUpdate(operation *Operation) (ret *TxErr) {
 			if nil != defTree {
 				defNode := treenode.GetNodeInTree(defTree, defID)
 				if nil != defNode {
-					task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, pushSetDefRefCount, defTree.ID, defNode.ID)
+					task.AppendAsyncTaskWithDelay(task.SetDefRefCount, 1*time.Second, refreshRefCount, defTree.ID, defNode.ID)
 				}
 			}
 		}
@@ -1230,32 +1260,18 @@ func getRefDefIDs(node *ast.Node) (refDefIDs []string) {
 
 		if treenode.IsBlockRef(n) {
 			refDefIDs = append(refDefIDs, n.TextMarkBlockRefID)
+		} else if treenode.IsEmbedBlockRef(n) {
+			defID := treenode.GetEmbedBlockRef(n)
+			refDefIDs = append(refDefIDs, defID)
 		}
 		return ast.WalkContinue
 	})
+	refDefIDs = gulu.Str.RemoveDuplicatedElem(refDefIDs)
 	return
 }
 
-func pushSetDefRefCount(rootID, blockID string) {
-	sql.WaitForWritingDatabase()
-
-	bt := treenode.GetBlockTree(blockID)
-	if nil == bt {
-		return
-	}
-
-	refCounts := sql.QueryRootChildrenRefCount(bt.RootID)
-	refCount := refCounts[blockID]
-	var rootRefCount int
-	for _, count := range refCounts {
-		rootRefCount += count
-	}
-	refIDs, _, _ := GetBlockRefIDs(blockID)
-	util.PushSetDefRefCount(rootID, blockID, refIDs, refCount, rootRefCount)
-}
-
 func upsertAvBlockRel(node *ast.Node) {
-	var avIDs []string
+	var affectedAvIDs []string
 	ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 		if !entering {
 			return ast.WalkContinue
@@ -1264,15 +1280,39 @@ func upsertAvBlockRel(node *ast.Node) {
 		if ast.NodeAttributeView == n.Type {
 			avID := n.AttributeViewID
 			if changed := av.UpsertBlockRel(avID, n.ID); changed {
-				avIDs = append(avIDs, avID)
+				affectedAvIDs = append(affectedAvIDs, avID)
 			}
 		}
 		return ast.WalkContinue
 	})
-	avIDs = gulu.Str.RemoveDuplicatedElem(avIDs)
-	for _, avID := range avIDs {
-		ReloadAttrView(avID)
+
+	updatedNodes := []*ast.Node{node}
+	var parents []*ast.Node
+	for parent := node.Parent; nil != parent && ast.NodeDocument != parent.Type; parent = parent.Parent {
+		parents = append(parents, parent)
 	}
+	updatedNodes = append(updatedNodes, parents...)
+	for _, updatedNode := range updatedNodes {
+		ast.Walk(updatedNode, func(n *ast.Node, entering bool) ast.WalkStatus {
+			avs := n.IALAttr(av.NodeAttrNameAvs)
+			if "" == avs {
+				return ast.WalkContinue
+			}
+
+			avIDs := strings.Split(avs, ",")
+			affectedAvIDs = append(affectedAvIDs, avIDs...)
+			return ast.WalkContinue
+		})
+	}
+
+	affectedAvIDs = gulu.Str.RemoveDuplicatedElem(affectedAvIDs)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		sql.FlushQueue()
+		for _, avID := range affectedAvIDs {
+			ReloadAttrView(avID)
+		}
+	}()
 }
 
 func (tx *Transaction) doUpdateUpdated(operation *Operation) (ret *TxErr) {
@@ -1423,6 +1463,7 @@ type Operation struct {
 	RowID               string                   `json:"rowID"`             // 属性视图行 ID
 	IsTwoWay            bool                     `json:"isTwoWay"`          // 属性视图关联列是否是双向关系
 	BackRelationKeyID   string                   `json:"backRelationKeyID"` // 属性视图关联列回链关联列的 ID
+	RemoveDest          bool                     `json:"removeDest"`        // 属性视图删除关联目标
 }
 
 type Transaction struct {
@@ -1510,125 +1551,6 @@ func (tx *Transaction) writeTree(tree *parse.Tree) (err error) {
 	return
 }
 
-// refreshDynamicRefText 用于刷新块引用的动态锚文本。
-// 该实现依赖了数据库缓存，导致外部调用时可能需要阻塞等待数据库写入后才能获取到 refs
-func refreshDynamicRefText(updatedDefNode *ast.Node, updatedTree *parse.Tree) {
-	changedDefs := map[string]*ast.Node{updatedDefNode.ID: updatedDefNode}
-	changedTrees := map[string]*parse.Tree{updatedTree.ID: updatedTree}
-	refreshDynamicRefTexts(changedDefs, changedTrees)
-}
-
-// refreshDynamicRefTexts 用于批量刷新块引用的动态锚文本。
-// 该实现依赖了数据库缓存，导致外部调用时可能需要阻塞等待数据库写入后才能获取到 refs
-func refreshDynamicRefTexts(updatedDefNodes map[string]*ast.Node, updatedTrees map[string]*parse.Tree) {
-	// 1. 更新引用的动态锚文本
-	treeRefNodeIDs := map[string]*hashset.Set{}
-	var changedParentNodes []*ast.Node
-	for _, updateNode := range updatedDefNodes {
-		refs, parentNodes := getRefsCacheByDefNode(updateNode)
-		for _, ref := range refs {
-			if refIDs, ok := treeRefNodeIDs[ref.RootID]; !ok {
-				refIDs = hashset.New()
-				refIDs.Add(ref.BlockID)
-				treeRefNodeIDs[ref.RootID] = refIDs
-			} else {
-				refIDs.Add(ref.BlockID)
-			}
-		}
-		if 0 < len(parentNodes) {
-			changedParentNodes = append(changedParentNodes, parentNodes...)
-		}
-	}
-	if 0 < len(changedParentNodes) {
-		for _, parent := range changedParentNodes {
-			updatedDefNodes[parent.ID] = parent
-		}
-	}
-
-	changedRefTree := map[string]*parse.Tree{}
-
-	for refTreeID, refNodeIDs := range treeRefNodeIDs {
-		refTree, ok := updatedTrees[refTreeID]
-		if !ok {
-			var err error
-			refTree, err = LoadTreeByBlockID(refTreeID)
-			if err != nil {
-				continue
-			}
-		}
-
-		var refTreeChanged bool
-		ast.Walk(refTree.Root, func(n *ast.Node, entering bool) ast.WalkStatus {
-			if !entering {
-				return ast.WalkContinue
-			}
-
-			if n.IsBlock() && refNodeIDs.Contains(n.ID) {
-				changed, changedDefNodes := updateRefText(n, updatedDefNodes)
-				if !refTreeChanged && changed {
-					refTreeChanged = true
-				}
-
-				// 推送动态锚文本节点刷新
-				for _, defNode := range changedDefNodes {
-					if "ref-d" == defNode.refType {
-						task.AppendAsyncTaskWithDelay(task.SetRefDynamicText, 200*time.Millisecond, util.PushSetRefDynamicText, refTreeID, n.ID, defNode.id, defNode.refText)
-					}
-				}
-				return ast.WalkContinue
-			}
-			return ast.WalkContinue
-		})
-
-		if refTreeChanged {
-			changedRefTree[refTreeID] = refTree
-			sql.UpdateRefsTreeQueue(refTree)
-		}
-	}
-
-	// 2. 更新属性视图主键内容
-	for _, updatedDefNode := range updatedDefNodes {
-		avs := updatedDefNode.IALAttr(av.NodeAttrNameAvs)
-		if "" == avs {
-			continue
-		}
-
-		avIDs := strings.Split(avs, ",")
-		for _, avID := range avIDs {
-			attrView, parseErr := av.ParseAttributeView(avID)
-			if nil != parseErr {
-				continue
-			}
-
-			changedAv := false
-			blockValues := attrView.GetBlockKeyValues()
-			if nil == blockValues {
-				continue
-			}
-
-			for _, blockValue := range blockValues.Values {
-				if blockValue.Block.ID == updatedDefNode.ID {
-					newContent := getNodeRefText(updatedDefNode)
-					if newContent != blockValue.Block.Content {
-						blockValue.Block.Content = newContent
-						changedAv = true
-					}
-					break
-				}
-			}
-			if changedAv {
-				av.SaveAttributeView(attrView)
-				ReloadAttrView(avID)
-			}
-		}
-	}
-
-	// 3. 保存变更
-	for _, tree := range changedRefTree {
-		indexWriteTreeUpsertQueue(tree)
-	}
-}
-
 func getRefsCacheByDefNode(updateNode *ast.Node) (ret []*sql.Ref, changedParentNodes []*ast.Node) {
 	ret = sql.GetRefsCacheByDefID(updateNode.ID)
 	if nil != updateNode.Parent && ast.NodeDocument != updateNode.Parent.Type &&
@@ -1659,7 +1581,7 @@ func updateRefTextRenameDoc(renamedTree *parse.Tree) {
 }
 
 func FlushUpdateRefTextRenameDocJob() {
-	sql.WaitForWritingDatabase()
+	sql.FlushQueue()
 	flushUpdateRefTextRenameDoc()
 }
 

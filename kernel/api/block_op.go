@@ -19,8 +19,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"path"
-	"strings"
 
 	"github.com/88250/gulu"
 	"github.com/88250/lute"
@@ -74,7 +72,7 @@ func moveOutlineHeading(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -113,7 +111,7 @@ func appendDailyNoteBlock(c *gin.Context) {
 		return
 	}
 
-	parentID := strings.TrimSuffix(path.Base(p), ".sy")
+	parentID := util.GetTreeID(p)
 	transactions := []*model.Transaction{
 		{
 			DoOperations: []*model.Operation{
@@ -127,7 +125,7 @@ func appendDailyNoteBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -166,7 +164,7 @@ func prependDailyNoteBlock(c *gin.Context) {
 		return
 	}
 
-	parentID := strings.TrimSuffix(path.Base(p), ".sy")
+	parentID := util.GetTreeID(p)
 	transactions := []*model.Transaction{
 		{
 			DoOperations: []*model.Operation{
@@ -180,7 +178,7 @@ func prependDailyNoteBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -241,7 +239,7 @@ func unfoldBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	broadcastTransactions(transactions)
 }
@@ -301,7 +299,7 @@ func foldBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	broadcastTransactions(transactions)
 }
@@ -355,7 +353,7 @@ func moveBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -400,7 +398,7 @@ func appendBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -445,7 +443,7 @@ func prependBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -508,7 +506,7 @@ func insertBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -599,7 +597,7 @@ func updateBlock(c *gin.Context) {
 	}
 
 	model.PerformTransactions(&transactions)
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 
 	ret.Data = transactions
 	broadcastTransactions(transactions)
@@ -648,7 +646,7 @@ func dataBlockDOM(data string, luteEngine *lute.Lute) (ret string, err error) {
 	ret, tree := luteEngine.Md2BlockDOMTree(data, true)
 	if "" == ret {
 		// 使用 API 插入空字符串出现错误 https://github.com/siyuan-note/siyuan/issues/3931
-		blankParagraph := treenode.NewParagraph()
+		blankParagraph := treenode.NewParagraph("")
 		ret = luteEngine.RenderNodeBlockDOM(blankParagraph)
 	}
 

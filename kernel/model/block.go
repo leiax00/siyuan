@@ -17,15 +17,18 @@
 package model
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"github.com/88250/lute/render"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
 	"github.com/88250/lute/parse"
-	"github.com/open-spaced-repetition/go-fsrs/v2"
+	"github.com/open-spaced-repetition/go-fsrs/v3"
 	"github.com/siyuan-note/siyuan/kernel/filesys"
 	"github.com/siyuan-note/siyuan/kernel/sql"
 	"github.com/siyuan-note/siyuan/kernel/treenode"
@@ -128,26 +131,8 @@ type BlockTreeInfo struct {
 
 func GetBlockTreeInfos(ids []string) (ret map[string]*BlockTreeInfo) {
 	ret = map[string]*BlockTreeInfo{}
-	luteEngine := util.NewLute()
-	treeCache := map[string]*parse.Tree{}
-	for _, id := range ids {
-		bt := treenode.GetBlockTree(id)
-		if nil == bt {
-			ret[id] = &BlockTreeInfo{ID: id}
-			continue
-		}
-
-		tree := treeCache[bt.RootID]
-		if nil == tree {
-			tree, _ = filesys.LoadTree(bt.BoxID, bt.Path, luteEngine)
-			if nil == tree {
-				ret[id] = &BlockTreeInfo{ID: id}
-				continue
-			}
-
-			treeCache[bt.RootID] = tree
-		}
-
+	trees := filesys.LoadTrees(ids)
+	for id, tree := range trees {
 		node := treenode.GetNodeInTree(tree, id)
 		if nil == node {
 			ret[id] = &BlockTreeInfo{ID: id}
@@ -298,7 +283,23 @@ func IsBlockFolded(id string) (isFolded, isRoot bool) {
 func RecentUpdatedBlocks() (ret []*Block) {
 	ret = []*Block{}
 
-	sqlBlocks := sql.QueryRecentUpdatedBlocks()
+	sqlStmt := "SELECT * FROM blocks WHERE type = 'p' AND length > 1"
+	if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container || util.ContainerHarmony == util.Container {
+		sqlStmt = "SELECT * FROM blocks WHERE type = 'd'"
+	}
+
+	if ignoreLines := getSearchIgnoreLines(); 0 < len(ignoreLines) {
+		// Support ignore search results https://github.com/siyuan-note/siyuan/issues/10089
+		buf := bytes.Buffer{}
+		for _, line := range ignoreLines {
+			buf.WriteString(" AND ")
+			buf.WriteString(line)
+		}
+		sqlStmt += buf.String()
+	}
+
+	sqlStmt += " ORDER BY updated DESC"
+	sqlBlocks := sql.SelectBlocksRawStmt(sqlStmt, 1, 16)
 	if 1 > len(sqlBlocks) {
 		return
 	}
@@ -325,11 +326,13 @@ func TransferBlockRef(fromID, toID string, refIDs []string) (err error) {
 	if 1 > len(refIDs) { // 如果不指定 refIDs，则转移所有引用了 fromID 的块
 		refIDs, _ = sql.QueryRefIDsByDefID(fromID, false)
 	}
-	for _, refID := range refIDs {
-		tree, _ := LoadTreeByBlockID(refID)
+
+	trees := filesys.LoadTrees(refIDs)
+	for refID, tree := range trees {
 		if nil == tree {
 			continue
 		}
+
 		node := treenode.GetNodeInTree(tree, refID)
 		textMarks := node.ChildrenByType(ast.NodeTextMark)
 		for _, textMark := range textMarks {
@@ -346,7 +349,7 @@ func TransferBlockRef(fromID, toID string, refIDs []string) (err error) {
 		}
 	}
 
-	sql.WaitForWritingDatabase()
+	sql.FlushQueue()
 	return
 }
 
@@ -393,7 +396,7 @@ func SwapBlockRef(refID, defID string, includeChildren bool) (err error) {
 	refreshUpdated(defNode)
 	refreshUpdated(refNode)
 
-	refPivot := treenode.NewParagraph()
+	refPivot := treenode.NewParagraph("")
 	refNode.InsertBefore(refPivot)
 
 	if ast.NodeListItem == defNode.Type {
@@ -461,7 +464,7 @@ func SwapBlockRef(refID, defID string, includeChildren bool) (err error) {
 			return
 		}
 	}
-	WaitForWritingFiles()
+	FlushTxQueue()
 	util.ReloadUI()
 	return
 }
@@ -615,7 +618,7 @@ func GetBlockDOM(id string) (ret string) {
 	return
 }
 
-func GetBlockKramdown(id string) (ret string) {
+func GetBlockKramdown(id, mode string) (ret string) {
 	if "" == id {
 		return
 	}
@@ -631,7 +634,13 @@ func GetBlockKramdown(id string) (ret string) {
 	root.AppendChild(node.Next) // IAL
 	root.PrependChild(node)
 	luteEngine := NewLute()
-	ret = treenode.ExportNodeStdMd(root, luteEngine)
+	if "md" == mode {
+		ret = treenode.ExportNodeStdMd(root, luteEngine)
+	} else {
+		tree.Root = root
+		formatRenderer := render.NewFormatRenderer(tree, luteEngine.RenderOptions)
+		ret = string(formatRenderer.Render())
+	}
 	return
 }
 
@@ -842,13 +851,30 @@ func getEmbeddedBlock(trees map[string]*parse.Tree, sqlBlock *sql.Block, heading
 	// 嵌入块查询结果中显示块引用计数 https://github.com/siyuan-note/siyuan/issues/7191
 	var defIDs []string
 	for _, n := range nodes {
-		defIDs = append(defIDs, n.ID)
+		ast.Walk(n, func(n *ast.Node, entering bool) ast.WalkStatus {
+			if !entering {
+				return ast.WalkContinue
+			}
+
+			if n.IsBlock() {
+				defIDs = append(defIDs, n.ID)
+			}
+			return ast.WalkContinue
+		})
 	}
+	defIDs = gulu.Str.RemoveDuplicatedElem(defIDs)
 	refCount := sql.QueryRefCount(defIDs)
 	for _, n := range nodes {
-		if cnt := refCount[n.ID]; 0 < cnt {
-			n.SetIALAttr("refcount", strconv.Itoa(cnt))
-		}
+		ast.Walk(n, func(n *ast.Node, entering bool) ast.WalkStatus {
+			if !entering || !n.IsBlock() {
+				return ast.WalkContinue
+			}
+
+			if cnt := refCount[n.ID]; 0 < cnt {
+				n.SetIALAttr("refcount", strconv.Itoa(cnt))
+			}
+			return ast.WalkContinue
+		})
 	}
 
 	luteEngine := NewLute()
@@ -868,7 +894,7 @@ func getEmbeddedBlock(trees map[string]*parse.Tree, sqlBlock *sql.Block, heading
 	}
 
 	if breadcrumb {
-		blockPaths = buildBlockBreadcrumb(def, nil)
+		blockPaths = buildBlockBreadcrumb(def, nil, true)
 	}
 	if 1 > len(blockPaths) {
 		blockPaths = []*BlockPath{}

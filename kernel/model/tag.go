@@ -24,7 +24,6 @@ import (
 
 	"github.com/88250/lute/ast"
 	"github.com/emirpasic/gods/sets/hashset"
-	"github.com/facette/natsort"
 	"github.com/siyuan-note/logging"
 	"github.com/siyuan-note/siyuan/kernel/search"
 	"github.com/siyuan-note/siyuan/kernel/sql"
@@ -207,16 +206,13 @@ type Tag struct {
 type Tags []*Tag
 
 func BuildTags() (ret *Tags) {
-	WaitForWritingFiles()
-
-	if !sql.IsEmptyQueue() {
-		sql.WaitForWritingDatabase()
-	}
+	FlushTxQueue()
+	sql.FlushQueue()
 
 	ret = &Tags{}
 	labels := labelTags()
 	tags := Tags{}
-	for label, _ := range labels {
+	for label := range labels {
 		tags = buildTags(tags, strings.Split(label, "/"), 0)
 	}
 	appendTagChildren(&tags, labels)
@@ -248,19 +244,19 @@ func sortTags(tags Tags) {
 	switch Conf.Tag.Sort {
 	case util.SortModeNameASC:
 		sort.Slice(tags, func(i, j int) bool {
-			return util.PinYinCompare(util.RemoveEmojiInvisible(tags[i].Name), util.RemoveEmojiInvisible(tags[j].Name))
+			return util.PinYinCompare(tags[i].Name, tags[j].Name)
 		})
 	case util.SortModeNameDESC:
 		sort.Slice(tags, func(j, i int) bool {
-			return util.PinYinCompare(util.RemoveEmojiInvisible(tags[i].Name), util.RemoveEmojiInvisible(tags[j].Name))
+			return util.PinYinCompare(tags[i].Name, tags[j].Name)
 		})
 	case util.SortModeAlphanumASC:
 		sort.Slice(tags, func(i, j int) bool {
-			return natsort.Compare(util.RemoveEmojiInvisible((tags)[i].Name), util.RemoveEmojiInvisible((tags)[j].Name))
+			return util.NaturalCompare((tags)[i].Name, (tags)[j].Name)
 		})
 	case util.SortModeAlphanumDESC:
 		sort.Slice(tags, func(i, j int) bool {
-			return natsort.Compare(util.RemoveEmojiInvisible((tags)[j].Name), util.RemoveEmojiInvisible((tags)[i].Name))
+			return util.NaturalCompare((tags)[j].Name, (tags)[i].Name)
 		})
 	case util.SortModeRefCountASC:
 		sort.Slice(tags, func(i, j int) bool { return (tags)[i].Count < (tags)[j].Count })
@@ -268,7 +264,7 @@ func sortTags(tags Tags) {
 		sort.Slice(tags, func(i, j int) bool { return (tags)[i].Count > (tags)[j].Count })
 	default:
 		sort.Slice(tags, func(i, j int) bool {
-			return natsort.Compare(util.RemoveEmojiInvisible((tags)[i].Name), util.RemoveEmojiInvisible((tags)[j].Name))
+			return util.NaturalCompare((tags)[i].Name, (tags)[j].Name)
 		})
 	}
 }
@@ -278,7 +274,7 @@ func SearchTags(keyword string) (ret []string) {
 	defer logging.Recover() // 定位 无法添加题头图标签 https://github.com/siyuan-note/siyuan/issues/6756
 
 	labels := labelBlocksByKeyword(keyword)
-	for label, _ := range labels {
+	for label := range labels {
 		_, t := search.MarkText(label, keyword, 1024, Conf.Search.CaseSensitive)
 		ret = append(ret, t)
 	}

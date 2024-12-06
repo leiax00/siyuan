@@ -25,7 +25,7 @@
     --b3-font-family: "Helvetica Neue", "Luxi Sans", "DejaVu Sans", "Hiragino Sans GB", "Segoe UI", "Microsoft Yahei", sans-serif, "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Android Emoji", "EmojiSymbols";
     --b3-font-family-protyle: var(--b3-font-family);
     --b3-font-family-code: "JetBrainsMono-Regular", mononoki, Consolas, "Liberation Mono", Menlo, Courier, monospace, var(--b3-font-family);
-    --b3-font-family-graph: mononoki;
+    --b3-font-family-graph: arial;
     --b3-font-family-emoji: "Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI", "Apple Color Emoji", "Twemoji Mozilla", "Noto Color Emoji", "Android Emoji";
     --b3-font-family-math: KaTeX_Math;
     --b3-font-size: 14px;
@@ -46,7 +46,7 @@
     --b3-scroll-color: rgba(230, 230, 230, .2);
 
     /* 列表 */
-    --b3-list-hover: var(--b3-border-color);
+    --b3-list-hover: rgba(255, 255, 255, .075);
     --b3-list-icon-hover: rgba(201, 209, 217, .1);
 
     /* 菜单 */
@@ -57,10 +57,6 @@
     --b3-tooltips-color: var(--b3-theme-on-surface-light);
     --b3-tooltips-second-color: #7d7c7a;
     --b3-tooltips-shadow: 0 2px 8px rgba(0, 0, 0, .3);
-
-    /* av */
-    --b3-av-hover: #2a2a2a;
-    --b3-av-background-hl: #28324e;
 
     /* 为空提示 */
     --b3-empty-color: var(--b3-theme-on-surface);
@@ -115,6 +111,15 @@
     /* 下拉菜单 */
     --b3-select-background: url("data:image/svg+xml;utf8,<svg fill='rgba(154, 160, 166, .68)' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") no-repeat right 2px center var(--b3-theme-background);
 
+    /* switch */
+    --b3-switch-background: #444746;
+    --b3-switch-border: var(--b3-theme-on-surface-light);
+    --b3-switch-hover: rgba(253, 252, 251, .10);
+    --b3-switch-checked: var(--b3-theme-primary);
+    --b3-switch-checked-background: #a8c7fa;
+    --b3-switch-checked-hover: var(--b3-theme-primary);
+    --b3-switch-checked-hover2: rgba(253, 252, 251, .10);
+
     /* 阴影 */
     --b3-point-shadow: inset 0 .5px .5px .5px rgba(255, 255, 255, .09), 0 3px 6px rgba(0, 0, 0, .04), 0 0 0 0 transparent;
     --b3-dialog-shadow: 0 8px 24px #010409;
@@ -152,9 +157,10 @@
     --b3-protyle-code-background: rgba(240, 246, 252, .15);
 
     /* 所见即所得行内元素颜色 */
-    --b3-protyle-inline-strong-color: #e8eaed;
-    --b3-protyle-inline-em-color: #e8eaed;
-    --b3-protyle-inline-s-color: #e8eaed;
+    --b3-protyle-inline-strong-color: inherit;
+    --b3-protyle-inline-em-color: inherit;
+    --b3-protyle-inline-u-color: inherit;
+    --b3-protyle-inline-s-color: inherit;
     --b3-protyle-inline-link-color: #8ab4f8;
     --b3-protyle-inline-mark-background: rgba(255, 208, 0, .4);
     --b3-protyle-inline-mark-color: var(--b3-theme-on-background);
@@ -164,7 +170,7 @@
 
     /* PDF */
     --b3-pdf-selection: #779170;
-    --b3-pdf-sidebar-width: 200px;
+    --sidebar-width: 200px;
     --b3-pdf-offset: 0;
     --b3-pdf-background1: var(--b3-theme-error);
     --b3-pdf-background2: #f5822e;
@@ -174,6 +180,18 @@
     --b3-pdf-background6: #69B0F2;
     --b3-pdf-background7: #C885DA;
     --b3-pdf-dark: #212224;
+
+    /* 表格 */
+    --b3-table-even-background: rgba(255, 255, 255, .03);
+
+    /* 嵌入块 */
+    --b3-embed-background: transparent;
+
+    /* 引述块 */
+    --b3-bq-background: transparent;
+
+    /* 父块颜色 */
+    --b3-parent-background: var(--b3-theme-background);
 }
 
 :lang(ja_JP):root {
@@ -181,7 +199,7 @@
 }
 
 /* https://github.com/siyuan-note/siyuan/issues/6440 */
-.protyle-action--order:after {
+.protyle-action--order::after {
     mix-blend-mode: screen;
 }
 

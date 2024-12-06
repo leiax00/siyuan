@@ -10,13 +10,17 @@ import {openNewWindow, openNewWindowById} from "../window/openNewWindow";
 import {Tab} from "../layout/Tab";
 /// #endif
 import {updateHotkeyTip} from "../protyle/util/compatibility";
+import * as platformUtils from "../protyle/util/compatibility";
 import {App} from "../index";
 import {Constants} from "../constants";
 import {Setting} from "./Setting";
 import {Menu} from "./Menu";
 import {Protyle} from "../protyle";
 import {openMobileFileById} from "../mobile/editor";
-import {lockScreen} from "../dialog/processSystem";
+import {lockScreen, exitSiYuan} from "../dialog/processSystem";
+import {Model} from "../layout/Model";
+import {getDockByType} from "../layout/tabUtil";
+import {getAllEditor} from "../layout/getAll";
 
 let openTab;
 let openWindow;
@@ -51,7 +55,7 @@ openTab = (options: {
     app: App,
     doc?: {
         id: string,     // 块 id
-        action?: string [] // cb-get-all：获取所有内容；cb-get-focus：打开后光标定位在 id 所在的块；cb-get-hl: 打开后 id 块高亮
+        action?: TProtyleAction [] // cb-get-all：获取所有内容；cb-get-focus：打开后光标定位在 id 所在的块；cb-get-hl: 打开后 id 块高亮
         zoomIn?: boolean // 是否缩放
     },
     pdf?: {
@@ -77,7 +81,7 @@ openTab = (options: {
     position?: "right" | "bottom",
     keepCursor?: boolean // 是否跳转到新 tab 上
     removeCurrentTab?: boolean // 在当前页签打开时需移除原有页签
-    afterOpen?: () => void // 打开后回调
+    afterOpen?: (model?: Model) => void // 打开后回调
 }) => {
     if (options.doc) {
         if (options.doc.zoomIn) {
@@ -164,23 +168,35 @@ openTab = (options: {
 };
 /// #endif
 
+const getModelByDockType = (type: TDock | string) => {
+    /// #if MOBILE
+    return window.siyuan.mobile.docks[type];
+    /// #else
+    return getDockByType(type).data[type];
+    /// #endif
+};
+
 export const API = {
-    confirm: confirmDialog,
-    showMessage,
     adaptHotkey: updateHotkeyTip,
+    confirm: confirmDialog,
+    Constants,
+    showMessage,
     fetchPost,
     fetchSyncPost,
     fetchGet,
     getFrontend,
     getBackend,
-    lockScreen,
-    openMobileFileById,
+    getModelByDockType,
     openTab,
     openWindow,
+    openMobileFileById,
+    lockScreen,
+    exitSiYuan,
     Protyle,
     Plugin,
     Dialog,
     Menu,
     Setting,
-    Constants,
+    getAllEditor,
+    platformUtils
 };

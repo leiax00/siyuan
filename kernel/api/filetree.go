@@ -214,8 +214,15 @@ func heading2Doc(c *gin.Context) {
 
 	srcHeadingID := arg["srcHeadingID"].(string)
 	targetNotebook := arg["targetNoteBook"].(string)
-	targetPath := arg["targetPath"].(string)
-	srcRootBlockID, targetPath, err := model.Heading2Doc(srcHeadingID, targetNotebook, targetPath)
+	var targetPath string
+	if arg["targetPath"] != nil {
+		targetPath = arg["targetPath"].(string)
+	}
+	var previousPath string
+	if arg["previousPath"] != nil {
+		previousPath = arg["previousPath"].(string)
+	}
+	srcRootBlockID, targetPath, err := model.Heading2Doc(srcHeadingID, targetNotebook, targetPath, previousPath)
 	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
@@ -223,7 +230,7 @@ func heading2Doc(c *gin.Context) {
 		return
 	}
 
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 	luteEngine := util.NewLute()
 	tree, err := filesys.LoadTree(targetNotebook, targetPath, luteEngine)
 	if err != nil {
@@ -259,8 +266,15 @@ func li2Doc(c *gin.Context) {
 
 	srcListItemID := arg["srcListItemID"].(string)
 	targetNotebook := arg["targetNoteBook"].(string)
-	targetPath := arg["targetPath"].(string)
-	srcRootBlockID, targetPath, err := model.ListItem2Doc(srcListItemID, targetNotebook, targetPath)
+	var targetPath string
+	if arg["targetPath"] != nil {
+		targetPath = arg["targetPath"].(string)
+	}
+	var previousPath string
+	if arg["previousPath"] != nil {
+		previousPath = arg["previousPath"].(string)
+	}
+	srcRootBlockID, targetPath, err := model.ListItem2Doc(srcListItemID, targetNotebook, targetPath, previousPath)
 	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
@@ -268,7 +282,7 @@ func li2Doc(c *gin.Context) {
 		return
 	}
 
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 	luteEngine := util.NewLute()
 	tree, err := filesys.LoadTree(targetNotebook, targetPath, luteEngine)
 	if err != nil {
@@ -488,6 +502,31 @@ func removeDoc(c *gin.Context) {
 	model.RemoveDoc(notebook, p)
 }
 
+func removeDocByID(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+
+	id := arg["id"].(string)
+	if util.InvalidIDPattern(id, ret) {
+		return
+	}
+
+	tree, err := model.LoadTreeByBlockID(id)
+	if err != nil {
+		ret.Code = -1
+		ret.Msg = err.Error()
+		ret.Data = map[string]interface{}{"closeTimeout": 7000}
+		return
+	}
+
+	model.RemoveDoc(tree.Box, tree.Path)
+}
+
 func removeDocs(c *gin.Context) {
 	ret := gulu.Ret.NewResult()
 	defer c.JSON(http.StatusOK, ret)
@@ -529,6 +568,41 @@ func renameDoc(c *gin.Context) {
 		return
 	}
 	return
+}
+
+func renameDocByID(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+	if nil == arg["id"] {
+		return
+	}
+
+	id := arg["id"].(string)
+	if util.InvalidIDPattern(id, ret) {
+		return
+	}
+
+	title := arg["title"].(string)
+
+	tree, err := model.LoadTreeByBlockID(id)
+	if err != nil {
+		ret.Code = -1
+		ret.Msg = err.Error()
+		ret.Data = map[string]interface{}{"closeTimeout": 7000}
+		return
+	}
+
+	err = model.RenameDoc(tree.Box, tree.Path, title)
+	if err != nil {
+		ret.Code = -1
+		ret.Msg = err.Error()
+		return
+	}
 }
 
 func duplicateDoc(c *gin.Context) {
@@ -591,7 +665,7 @@ func createDoc(c *gin.Context) {
 		return
 	}
 
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 	box := model.Conf.Box(notebook)
 	pushCreate(box, p, tree.Root.ID, arg)
 
@@ -621,7 +695,7 @@ func createDailyNote(c *gin.Context) {
 		return
 	}
 
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 	box := model.Conf.Box(notebook)
 	luteEngine := util.NewLute()
 	tree, err := filesys.LoadTree(box.ID, p, luteEngine)
@@ -673,6 +747,12 @@ func createDocWithMd(c *gin.Context) {
 		return
 	}
 
+	tagsArg := arg["tags"]
+	var tags string
+	if nil != tagsArg {
+		tags = tagsArg.(string)
+	}
+
 	var parentID string
 	parentIDArg := arg["parentID"]
 	if nil != parentIDArg {
@@ -705,8 +785,13 @@ func createDocWithMd(c *gin.Context) {
 	if nil != withMathArg {
 		withMath = withMathArg.(bool)
 	}
+	clippingHref := ""
+	clippingHrefArg := arg["clippingHref"]
+	if nil != clippingHrefArg {
+		clippingHref = clippingHrefArg.(string)
+	}
 
-	id, err := model.CreateWithMarkdown(notebook, hPath, markdown, parentID, id, withMath)
+	id, err := model.CreateWithMarkdown(tags, notebook, hPath, markdown, parentID, id, withMath, clippingHref)
 	if err != nil {
 		ret.Code = -1
 		ret.Msg = err.Error()
@@ -714,7 +799,7 @@ func createDocWithMd(c *gin.Context) {
 	}
 	ret.Data = id
 
-	model.WaitForWritingFiles()
+	model.FlushTxQueue()
 	box := model.Conf.Box(notebook)
 	b, _ := model.GetBlock(id, nil)
 	p := b.Path

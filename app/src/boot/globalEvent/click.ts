@@ -19,7 +19,9 @@ export const globalClick = (event: MouseEvent & { target: HTMLElement }) => {
             document.querySelector("#dockMoveItem")?.remove();
         } else {
             const startElement = ghostElement.parentElement.querySelector(`[data-node-id="${ghostElement.getAttribute("data-node-id")}"]`) as HTMLElement;
-            startElement ? startElement.style.opacity = "" : "";
+            if (startElement) {
+                startElement.style.opacity = "";
+            }
             ghostElement.parentElement.querySelectorAll(".dragover__top, .dragover__bottom, .dragover").forEach((item: HTMLElement) => {
                 item.classList.remove("dragover__top", "dragover__bottom", "dragover");
                 item.style.opacity = "";
@@ -64,7 +66,7 @@ export const globalClick = (event: MouseEvent & { target: HTMLElement }) => {
     }
     const copyElement = hasTopClosestByClassName(event.target, "protyle-action__copy");
     if (copyElement) {
-        let text = copyElement.parentElement.nextElementSibling.textContent.trimEnd();
+        let text = copyElement.parentElement.nextElementSibling.textContent.replace(/\n$/, "");
         text = text.replace(/\u00A0/g, " "); // Replace non-breaking spaces with normal spaces when copying https://github.com/siyuan-note/siyuan/issues/9382
         writeText(text);
         showMessage(window.siyuan.languages.copied, 2000);
@@ -73,8 +75,8 @@ export const globalClick = (event: MouseEvent & { target: HTMLElement }) => {
     }
 
     // 点击空白，pdf 搜索、更多消失
-    if (hasClosestByAttribute(event.target, "id", "secondaryToolbarToggle") ||
-        hasClosestByAttribute(event.target, "id", "viewFind") ||
+    if (hasClosestByAttribute(event.target, "id", "secondaryToolbarToggleButton") ||
+        hasClosestByAttribute(event.target, "id", "viewFindButton") ||
         hasClosestByAttribute(event.target, "id", "findbar")) {
         return;
     }
