@@ -111,6 +111,7 @@ func (conf *AppConf) GetUser() *conf.User {
 func (conf *AppConf) SetUser(user *conf.User) {
 	conf.m.Lock()
 	defer conf.m.Unlock()
+	user.ToSubscriptionUser()
 	conf.User = user
 }
 
