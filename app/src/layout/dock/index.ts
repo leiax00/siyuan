@@ -19,7 +19,8 @@ import {hasClosestByClassName} from "../../protyle/util/hasClosest";
 import {App} from "../../index";
 import {Plugin} from "../../plugin";
 import {Custom} from "./Custom";
-import {recordBeforeResizeTop} from "../../protyle/util/resize";
+import {clearBeforeResizeTop, recordBeforeResizeTop} from "../../protyle/util/resize";
+import {Constants} from "../../constants";
 
 const TYPES = ["file", "outline", "inbox", "bookmark", "tag", "graph", "globalGraph", "backlink"];
 
@@ -496,7 +497,9 @@ export class Dock {
         if (!type) {
             return;
         }
-        recordBeforeResizeTop();
+        if (this.pin) {
+            recordBeforeResizeTop();
+        }
         const target = this.element.querySelector(`[data-type="${type}"]`) as HTMLElement;
         if (show && target.classList.contains("dock__item--active")) {
             target.classList.remove("dock__item--active", "dock__item--activefocus");
@@ -519,6 +522,7 @@ export class Dock {
                     if (document.activeElement) {
                         (document.activeElement as HTMLElement).blur();
                     }
+                    clearBeforeResizeTop();
                     this.showDock();
                     return;
                 }
@@ -775,15 +779,14 @@ export class Dock {
         const sourceWnd = sourceDock.layout.children[parseInt(sourceElement.getAttribute("data-index"))] as Wnd;
         const sourceId = sourceElement.getAttribute("data-id");
         if (sourceId) {
-            sourceWnd.removeTab(sourceElement.getAttribute("data-id"));
+            sourceWnd.removeTab(sourceElement.getAttribute("data-id"), false, true, false);
             sourceElement.removeAttribute("data-id");
         }
         const hasActive = sourceElement.classList.contains("dock__item--active");
         if (hasActive) {
-            sourceDock.toggleModel(type);
+            sourceDock.toggleModel(type, false, false, false, false);
         }
         delete sourceDock.data[type];
-
         // 目标处理
         sourceElement.setAttribute("data-index", index.toString());
         if (previousType) {
@@ -801,7 +804,10 @@ export class Dock {
         if (hasActive) {
             this.toggleModel(type, true, false, false, false);
         }
-        saveLayout();
+        // 保存布局需等待动画完毕 https://github.com/siyuan-note/siyuan/issues/13507
+        setTimeout(() => {
+            saveLayout();
+        }, Constants.TIMEOUT_TRANSITION);
     }
 
     public remove(key: TDock | string) {

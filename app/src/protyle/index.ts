@@ -17,7 +17,8 @@ import {Breadcrumb} from "./breadcrumb";
 import {
     onTransaction,
     transaction,
-    turnsIntoOneTransaction, turnsIntoTransaction,
+    turnsIntoOneTransaction,
+    turnsIntoTransaction,
     updateBatchTransaction,
     updateTransaction
 } from "./wysiwyg/transaction";
@@ -41,9 +42,12 @@ import {focusBlock, getEditorRange} from "./util/selection";
 import {hasClosestBlock} from "./util/hasClosest";
 import {setStorageVal} from "./util/compatibility";
 import {merge} from "./util/merge";
+/// #if !MOBILE
 import {getAllModels} from "../layout/getAll";
+/// #endif
 import {isSupportCSSHL} from "./render/searchMarkRender";
 import {renderAVAttribute} from "./render/av/blockAttr";
+import {genEmptyElement} from "../block/util";
 
 export class Protyle {
 
@@ -128,6 +132,7 @@ export class Protyle {
                         case "reload":
                             if (data.data === this.protyle.block.rootID) {
                                 reloadProtyle(this.protyle, false);
+                                /// #if !MOBILE
                                 getAllModels().outline.forEach(item => {
                                     if (item.blockId === data.data) {
                                         fetchPost("/api/outline/getDocOutline", {
@@ -138,6 +143,7 @@ export class Protyle {
                                         });
                                     }
                                 });
+                                /// #endif
                             }
                             break;
                         case "refreshAttributeView":
@@ -159,15 +165,30 @@ export class Protyle {
                                     this.protyle.preview.render(this.protyle);
                                 } else if (options.backlinkData && ["delete", "move"].includes(item.action)) {
                                     // 只对特定情况刷新，否则展开、编辑等操作刷新会频繁
+                                    /// #if !MOBILE
                                     getAllModels().backlink.find(backlinkItem => {
                                         if (backlinkItem.element.contains(this.protyle.element)) {
                                             backlinkItem.refresh();
                                             return true;
                                         }
                                     });
+                                    /// #endif
                                     return true;
                                 } else {
                                     onTransaction(this.protyle, item, false);
+                                    // 反链面板移除元素后，文档为空
+                                    if (this.protyle.wysiwyg.element.childElementCount === 0 && this.protyle.block.parentID) {
+                                        const newID = Lute.NewNodeID();
+                                        const emptyElement = genEmptyElement(false, false, newID);
+                                        this.protyle.wysiwyg.element.append(emptyElement);
+                                        transaction(this.protyle, [{
+                                            action: "insert",
+                                            data: emptyElement.outerHTML,
+                                            id: newID,
+                                            parentID: this.protyle.block.parentID
+                                        }]);
+                                        this.protyle.undo.clear();
+                                    }
                                 }
                             });
                             break;
@@ -264,7 +285,7 @@ export class Protyle {
                 this.protyle.block.rootID = options.blockId;
                 renderBacklink(this.protyle, options.backlinkData);
                 // 为了满足 eventPath0.style.paddingLeft 从而显示块标 https://github.com/siyuan-note/siyuan/issues/11578
-                this.protyle.wysiwyg.element.style.paddingLeft = "16px";
+                this.protyle.wysiwyg.element.style.padding = "4px 16px 4px 24px";
                 return;
             }
             if (!options.blockId) {

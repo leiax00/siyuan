@@ -236,7 +236,7 @@ export const queryMenu = (config: Config.IUILayoutTabSearchConfig, cb: () => voi
     window.siyuan.menus.menu.remove();
     window.siyuan.menus.menu.element.setAttribute("data-name", "searchMethod");
     window.siyuan.menus.menu.append(new MenuItem({
-        iconHTML: "",
+        icon: "iconExact",
         label: window.siyuan.languages.keyword,
         current: config.method === 0,
         click() {
@@ -245,7 +245,7 @@ export const queryMenu = (config: Config.IUILayoutTabSearchConfig, cb: () => voi
         }
     }).element);
     window.siyuan.menus.menu.append(new MenuItem({
-        iconHTML: "",
+        icon: "iconQuote",
         label: window.siyuan.languages.querySyntax,
         current: config.method === 1,
         click() {
@@ -254,7 +254,7 @@ export const queryMenu = (config: Config.IUILayoutTabSearchConfig, cb: () => voi
         }
     }).element);
     window.siyuan.menus.menu.append(new MenuItem({
-        iconHTML: "",
+        icon: "iconDatabase",
         label: "SQL",
         current: config.method === 2,
         click() {
@@ -263,7 +263,7 @@ export const queryMenu = (config: Config.IUILayoutTabSearchConfig, cb: () => voi
         }
     }).element);
     window.siyuan.menus.menu.append(new MenuItem({
-        iconHTML: "",
+        icon: "iconRegex",
         label: window.siyuan.languages.regex,
         current: config.method === 3,
         click() {
@@ -651,8 +651,13 @@ export const initCriteriaMenu = (element: HTMLElement, data: Config.IUILayoutTab
 
 export const getKeyByLiElement = (element: HTMLElement) => {
     const keys: string[] = [];
-    element.querySelectorAll("mark").forEach(item => {
+    element.querySelectorAll(".b3-list-item__text mark").forEach(item => {
         keys.push(item.textContent);
     });
+    if (keys.length === 0) {
+        element.querySelectorAll(".b3-list-item__meta mark").forEach(item => {
+            keys.push(item.textContent);
+        });
+    }
     return [...new Set(keys)].join(" ");
 };

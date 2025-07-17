@@ -182,6 +182,10 @@ func PushReloadFiletree() {
 	BroadcastByType("filetree", "reloadFiletree", 0, "", nil)
 }
 
+func PushReloadTag() {
+	BroadcastByType("main", "reloadTag", 0, "", nil)
+}
+
 type BlockStatResult struct {
 	RuneCount  int `json:"runeCount"`
 	WordCount  int `json:"wordCount"`
@@ -273,6 +277,10 @@ func PushSetRefDynamicText(rootID, blockID, defBlockID, refText string) {
 
 func PushSetDefRefCount(rootID, blockID string, defIDs []string, refCount, rootRefCount int) {
 	BroadcastByType("main", "setDefRefCount", 0, "", map[string]interface{}{"rootID": rootID, "blockID": blockID, "refCount": refCount, "rootRefCount": rootRefCount, "defIDs": defIDs})
+}
+
+func PushLocalShorthandCount(count int) {
+	BroadcastByType("main", "setLocalShorthandCount", 0, "", map[string]interface{}{"count": count})
 }
 
 func PushProtyleLoading(rootID, msg string) {

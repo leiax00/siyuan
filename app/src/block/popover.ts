@@ -32,7 +32,7 @@ export const initBlockPopover = (app: App) => {
                 if (aElement.classList.contains("av__cell--header")) {
                     const textElement = aElement.querySelector(".av__celltext");
                     const desc = aElement.getAttribute("data-desc");
-                    if (textElement.scrollWidth > textElement.clientWidth + 2 || desc) {
+                    if (textElement.scrollWidth > textElement.clientWidth + 0.5 || desc) {
                         if (desc) {
                             tip = `${getCellText(aElement)}<div class='ft__on-surface'>${escapeAriaLabel(desc)}</div>`;
                         } else {
@@ -57,7 +57,7 @@ export const initBlockPopover = (app: App) => {
             } else if (aElement.parentElement.parentElement.classList.contains("av__views") && aElement.parentElement.classList.contains("layout-tab-bar")) {
                 const textElement = aElement.querySelector(".item__text");
                 const desc = aElement.getAttribute("data-desc");
-                if (textElement.scrollWidth > textElement.clientWidth + 2 || desc) {
+                if (textElement.scrollWidth > textElement.clientWidth + 0.5 || desc) {
                     if (desc) {
                         tip = `${textElement.textContent}<div class='ft__on-surface'>${escapeAriaLabel(desc)}</div>`;
                     } else {
@@ -104,7 +104,7 @@ export const initBlockPopover = (app: App) => {
                     });
                     tip = "";
                 } else if (title) {
-                    tip += '<div class="fn__hr"></div><span>' + title + "</span>";
+                    tip = (tip ? (tip + '<div class="fn__hr"></div>') : "") + "<span>" + title + "</span>";
                 }
             }
 
@@ -272,7 +272,16 @@ const hidePopover = (event: MouseEvent & { path: HTMLElement[] }) => {
                     itemLevel > parseInt(blockElement.getAttribute("data-level"))) {
                     if (menuLevel && menuLevel >= itemLevel) {
                         // 有 gutter 菜单时不隐藏
+                        break;
                     } else {
+                        const hasToolbar = item.editors.find(editItem => {
+                            if (!editItem.protyle.toolbar.subElement.classList.contains("fn__none")) {
+                                return true;
+                            }
+                        });
+                        if (hasToolbar) {
+                            break;
+                        }
                         item.destroy();
                     }
                 }
@@ -284,10 +293,20 @@ const hidePopover = (event: MouseEvent & { path: HTMLElement[] }) => {
                 if ((item.targetElement || typeof item.x === "number") && item.element.getAttribute("data-pin") === "false") {
                     if (menuLevel && menuLevel >= itemLevel) {
                         // 有 gutter 菜单时不隐藏
+                        break;
                     } else if (item.targetElement && item.targetElement.classList.contains("protyle-wysiwyg__embed") &&
                         item.targetElement.contains(targetElement)) {
                         // 点击嵌入块后浮窗消失后再快速点击嵌入块无法弹出浮窗 https://github.com/siyuan-note/siyuan/issues/12511
+                        break;
                     } else {
+                        const hasToolbar = item.editors.find(editItem => {
+                            if (!editItem.protyle.toolbar.subElement.classList.contains("fn__none")) {
+                                return true;
+                            }
+                        });
+                        if (hasToolbar) {
+                           break;
+                        }
                         item.destroy();
                     }
                 }
@@ -416,7 +435,7 @@ export const showPopover = async (app: App, showRef = false) => {
         }
     });
     if (!hasPin && popoverTargetElement.parentElement &&
-        popoverTargetElement.parentElement.style.opacity !== "0.1" // 反向面板图标拖拽时不应该弹层
+        popoverTargetElement.parentElement.style.opacity !== "0.38" // 反向面板图标拖拽时不应该弹层
     ) {
         window.siyuan.blockPanels.push(new BlockPanel({
             app,

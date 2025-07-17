@@ -11,7 +11,7 @@ import {isKernelInMobile} from "../util/functions";
 const renderProvider = (provider: number) => {
     if (provider === 0) {
         if (needSubscribe("")) {
-            return `<div class="b3-label b3-label--inner">${window.siyuan.config.system.container === "ios" ? window.siyuan.languages._kernel[122] : window.siyuan.languages._kernel[29].replace("${url}", getCloudURL("subscribe/siyuan"))}</div>
+            return `<div class="b3-label b3-label--inner">${window.siyuan.config.system.container === "ios" ? window.siyuan.languages._kernel[122] : window.siyuan.languages._kernel[29].replaceAll("${accountServer}", getCloudURL(""))}</div>
 <div class="b3-label b3-label--inner">
     ${window.siyuan.languages.cloudIntro1}
     <div class="b3-label__text">
@@ -41,7 +41,7 @@ const renderProvider = (provider: number) => {
 </div>`;
     }
     if (!isPaidUser()) {
-        return `<div class="b3-label b3-label--inner">${window.siyuan.languages["_kernel"][214]}</div>`;
+        return `<div class="b3-label b3-label--inner">${window.siyuan.languages["_kernel"][214].replaceAll("${accountServer}", getCloudURL(""))}</div>`;
     }
     if (provider === 2) {
         return `<div class="b3-label b3-label--inner">
@@ -424,7 +424,7 @@ export const repos = {
         <option value="0" ${window.siyuan.config.sync.provider === 0 ? "selected" : ""}>SiYuan</option>
         <option value="2" ${window.siyuan.config.sync.provider === 2 ? "selected" : ""}>S3</option>
         <option value="3" ${window.siyuan.config.sync.provider === 3 ? "selected" : ""}>WebDAV</option>
-        <option value="4" ${window.siyuan.config.sync.provider === 4 ? "selected" : ""}>${window.siyuan.languages.localFlieSystem}</option>
+        <option value="4" ${window.siyuan.config.sync.provider === 4 ? "selected" : ""}>${window.siyuan.languages.localFileSystem}</option>
     </select>
 </div>
 <div id="syncProviderPanel" class="b3-label">

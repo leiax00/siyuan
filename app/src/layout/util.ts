@@ -516,7 +516,7 @@ export const JSONToLayout = (app: App, isStart: boolean) => {
         }
         // 移除没有数据的页签 https://github.com/siyuan-note/siyuan/issues/13390
         removedTabs.forEach(item => {
-            item.parent.removeTab(item.id);
+            item.parent.removeTab(item.id, false, false, false);
         });
     }
     // 需放在 tab.parent.switchTab 后，否则当前 tab 永远为最后一个
@@ -842,7 +842,7 @@ export const addResize = (obj: Layout | Wnd) => {
             documentSelf.ondragstart = () => {
                 // 文件树拖拽会产生透明效果
                 document.querySelectorAll(".sy__file .b3-list-item").forEach((item: HTMLElement) => {
-                    if (item.style.opacity === "0.1") {
+                    if (item.style.opacity === "0.38") {
                         item.style.opacity = "";
                     }
                 });

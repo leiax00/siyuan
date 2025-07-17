@@ -36,6 +36,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
+	"github.com/88250/lute/editor"
 	"github.com/88250/lute/html"
 	"github.com/88250/lute/parse"
 	"github.com/mattn/go-sqlite3"
@@ -196,6 +197,10 @@ func initDBTables() {
 	_, err = db.Exec("CREATE TABLE attributes (id, name, value, type, block_id, root_id, box, path)")
 	if err != nil {
 		logging.LogFatalf(logging.ExitCodeReadOnlyDatabase, "create table [attributes] failed: %s", err)
+	}
+	_, err = db.Exec("CREATE INDEX idx_attributes_block_id ON attributes(block_id)")
+	if err != nil {
+		logging.LogFatalf(logging.ExitCodeReadOnlyDatabase, "create index [idx_attributes_block_id] failed: %s", err)
 	}
 	_, err = db.Exec("CREATE INDEX idx_attributes_root_id ON attributes(root_id)")
 	if err != nil {
@@ -845,7 +850,7 @@ func buildBlockFromNode(n *ast.Node, tree *parse.Tree) (block *Block, attributes
 		fcontent = NodeStaticContent(fc, nil, true, false, true)
 
 		parentID = n.Parent.ID
-		if h := heading(n); nil != h { // 如果在标题块下方，则将标题块作为父节点
+		if h := treenode.HeadingParent(n); nil != h { // 如果在标题块下方，则将标题块作为父节点
 			parentID = h.ID
 		}
 		length = utf8.RuneCountInString(fcontent)
@@ -857,11 +862,16 @@ func buildBlockFromNode(n *ast.Node, tree *parse.Tree) (block *Block, attributes
 		content = NodeStaticContent(n, nil, true, indexAssetPath, true)
 
 		parentID = n.Parent.ID
-		if h := heading(n); nil != h {
+		if h := treenode.HeadingParent(n); nil != h {
 			parentID = h.ID
 		}
 		length = utf8.RuneCountInString(content)
 	}
+
+	// 剔除零宽空格 Database index content/markdown values no longer contain zero-width spaces https://github.com/siyuan-note/siyuan/issues/15204
+	fcontent = strings.ReplaceAll(fcontent, editor.Zwsp, "")
+	content = strings.ReplaceAll(content, editor.Zwsp, "")
+	markdown = strings.ReplaceAll(markdown, editor.Zwsp, "")
 
 	block = &Block{
 		ID:       n.ID,
@@ -939,26 +949,6 @@ func tagFromNode(node *ast.Node) (ret string) {
 		return ast.WalkContinue
 	})
 	return strings.TrimSpace(tagBuilder.String())
-}
-
-func heading(node *ast.Node) *ast.Node {
-	if nil == node {
-		return nil
-	}
-
-	currentLevel := 16
-	if ast.NodeHeading == node.Type {
-		currentLevel = node.HeadingLevel
-	}
-
-	for prev := node.Previous; nil != prev; prev = prev.Previous {
-		if ast.NodeHeading == prev.Type {
-			if prev.HeadingLevel < currentLevel {
-				return prev
-			}
-		}
-	}
-	return nil
 }
 
 func deleteByBoxTx(tx *sql.Tx, box string) (err error) {
@@ -1512,6 +1502,17 @@ func SQLTemplateFuncs(templateFuncMap *template.FuncMap) {
 			stmt = strings.Replace(stmt, "?", arg, 1)
 		}
 		retBlocks = SelectBlocksRawStmt(stmt, 1, 512)
+		return
+	}
+	(*templateFuncMap)["getBlock"] = func(arg any) (retBlock *Block) {
+		switch v := arg.(type) {
+		case string:
+			retBlock = GetBlock(v)
+		case map[string]interface{}:
+			if id, ok := v["id"]; ok {
+				retBlock = GetBlock(id.(string))
+			}
+		}
 		return
 	}
 	(*templateFuncMap)["querySpans"] = func(stmt string, args ...string) (retSpans []*Span) {

@@ -10,7 +10,7 @@ import {addBaseURL, getIdFromSYProtocol, isSYProtocol, setNoteBook} from "../uti
 import {handleTouchEnd, handleTouchMove, handleTouchStart} from "./util/touch";
 import {fetchGet, fetchPost} from "../util/fetch";
 import {initFramework} from "./util/initFramework";
-import {addGA, initAssets, loadAssets} from "../util/assets";
+import {initAssets, loadAssets} from "../util/assets";
 import {bootSync} from "../dialog/processSystem";
 import {initMessage, showMessage} from "../dialog/message";
 import {goBack} from "./util/MobileBackFoward";
@@ -28,6 +28,8 @@ import {isNotEditBlock} from "../protyle/wysiwyg/getBlock";
 import {updateCardHV} from "../card/util";
 import {mobileKeydown} from "./util/keydown";
 import {correctHotkey} from "../boot/globalEvent/commonHotkey";
+import {processIOSPurchaseResponse} from "../util/iOSPurchase";
+import {updateControlAlt} from "../protyle/util/hotKey";
 
 class App {
     public plugins: import("../plugin").Plugin[] = [];
@@ -95,6 +97,7 @@ class App {
             addScriptSync(`${Constants.PROTYLE_CDN}/js/lute/lute.min.js?v=${Constants.SIYUAN_VERSION}`, "protyleLuteScript");
             addScript(`${Constants.PROTYLE_CDN}/js/protyle-html.js?v=${Constants.SIYUAN_VERSION}`, "protyleWcHtmlScript");
             window.siyuan.config = confResponse.data.conf;
+            updateControlAlt();
             window.siyuan.isPublish = confResponse.data.isPublish;
             correctHotkey(siyuanApp);
             await loadPlugins(this);
@@ -118,7 +121,6 @@ class App {
                             });
                         });
                     });
-                    addGA();
                 });
             });
             document.addEventListener("touchstart", handleTouchStart, false);
@@ -126,11 +128,14 @@ class App {
             document.addEventListener("touchend", (event) => {
                 handleTouchEnd(event, siyuanApp);
             }, false);
-            window.addEventListener("keydown", (event) => {
-                mobileKeydown(siyuanApp, event);
+            window.addEventListener("keyup", () => {
+                window.siyuan.ctrlIsPressed = false;
+                window.siyuan.shiftIsPressed = false;
+                window.siyuan.altIsPressed = false;
             });
             // 移动端删除键 https://github.com/siyuan-note/siyuan/issues/9259
             window.addEventListener("keydown", (event) => {
+                mobileKeydown(siyuanApp, event);
                 if (getSelection().rangeCount > 0) {
                     const range = getSelection().getRangeAt(0);
                     const editor = getCurrentEditor();
@@ -162,6 +167,8 @@ window.reconnectWebSocket = () => {
     window.siyuan.mobile.popEditor.protyle.ws.send("ping", {});
 };
 window.goBack = goBack;
+window.showMessage = showMessage;
+window.processIOSPurchaseResponse = processIOSPurchaseResponse;
 window.showKeyboardToolbar = (height) => {
     document.getElementById("keyboardToolbar").setAttribute("data-keyboardheight", (height ? height : window.outerHeight / 2 - 42).toString());
     showKeyboardToolbar();

@@ -38,7 +38,6 @@ import (
 	"github.com/88250/lute/html"
 	"github.com/88250/lute/parse"
 	"github.com/gabriel-vasile/mimetype"
-	"github.com/imroc/req/v3"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/httpclient"
 	"github.com/siyuan-note/logging"
@@ -101,11 +100,7 @@ func NetAssets2LocalAssets(rootID string, onlyImg bool, originalURL string) (err
 		}
 	}
 
-	browserClient := req.C().
-		SetUserAgent(util.UserAgent).
-		SetTimeout(30 * time.Second).
-		EnableInsecureSkipVerify().
-		SetProxy(httpclient.ProxyFromEnvironment)
+	browserClient := util.NewCustomReqClient() // 自定义了 TLS 指纹，增加下载成功率
 
 	forbiddenCount := 0
 	destNodes := getRemoteAssetsLinkDestsInTree(tree, onlyImg)
@@ -649,9 +644,16 @@ func RenameAsset(oldPath, newName string) (newPath string, err error) {
 	}
 
 	newName = util.AssetName(newName + filepath.Ext(oldPath))
-	newPath = "assets/" + newName
-	if err = filelock.Copy(filepath.Join(util.DataDir, oldPath), filepath.Join(util.DataDir, newPath)); err != nil {
-		logging.LogErrorf("copy asset [%s] failed: %s", oldPath, err)
+	parentDir := path.Dir(oldPath)
+	newPath = path.Join(parentDir, newName)
+	oldAbsPath, getErr := GetAssetAbsPath(oldPath)
+	if getErr != nil {
+		logging.LogErrorf("get asset [%s] abs path failed: %s", oldPath, getErr)
+		return
+	}
+	newAbsPath := filepath.Join(filepath.Dir(oldAbsPath), newName)
+	if err = filelock.Copy(oldAbsPath, newAbsPath); err != nil {
+		logging.LogErrorf("copy asset [%s] failed: %s", oldAbsPath, err)
 		return
 	}
 

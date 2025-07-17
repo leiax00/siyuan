@@ -1,18 +1,36 @@
 import {hideElements} from "../ui/hideElements";
 import {setPadding} from "../ui/initUI";
-import {hasClosestBlock} from "./hasClosest";
+import {hasClosestBlock, hasClosestByClassName} from "./hasClosest";
 import {Constants} from "../../constants";
 import {lineNumberRender} from "../render/highlightRender";
-import {stickyRow} from "../render/av/row";
+/// #if !MOBILE
 import {getAllModels} from "../../layout/getAll";
+/// #endif
+import {stickyRow} from "../render/av/row";
+
+export const clearBeforeResizeTop = () => {
+    /// #if !MOBILE
+    getAllModels().editor.forEach((item) => {
+        if (item.editor && item.editor.protyle &&
+            item.element.parentElement && !item.element.classList.contains("fn__none")) {
+            item.editor.protyle.wysiwyg.element.querySelector("[data-resize-top]")?.removeAttribute("data-resize-top");
+        }
+    });
+    /// #endif
+};
 
 export const recordBeforeResizeTop = () => {
+    /// #if !MOBILE
     getAllModels().editor.forEach((item) => {
         if (item.editor && item.editor.protyle &&
             item.element.parentElement && !item.element.classList.contains("fn__none")) {
             item.editor.protyle.wysiwyg.element.querySelector("[data-resize-top]")?.removeAttribute("data-resize-top");
             const contentRect = item.editor.protyle.contentElement.getBoundingClientRect();
             let topElement = document.elementFromPoint(contentRect.left + (contentRect.width / 2), contentRect.top);
+            if (hasClosestByClassName(topElement, "b3-menu")) {
+                window.siyuan.menus.menu.remove();
+                topElement = document.elementFromPoint(contentRect.left + (contentRect.width / 2), contentRect.top);
+            }
             if (!topElement) {
                 topElement = document.elementFromPoint(contentRect.left + (contentRect.width / 2), contentRect.top + 17);
             }
@@ -23,9 +41,10 @@ export const recordBeforeResizeTop = () => {
             if (!topElement) {
                 return;
             }
-            topElement.setAttribute("data-resize-top", topElement.getBoundingClientRect().top.toString());
+            topElement.setAttribute("data-resize-top", (contentRect.top - topElement.getBoundingClientRect().top).toString());
         }
     });
+    /// #endif
 };
 
 export const resize = (protyle: IProtyle) => {
@@ -64,7 +83,7 @@ export const resize = (protyle: IProtyle) => {
         const topElement = protyle.wysiwyg.element.querySelector("[data-resize-top]");
         if (topElement) {
             topElement.scrollIntoView();
-            protyle.contentElement.scrollTop += topElement.getBoundingClientRect().top - parseInt(topElement.getAttribute("data-resize-top"));
+            protyle.contentElement.scrollTop += parseInt(topElement.getAttribute("data-resize-top"));
             topElement.removeAttribute("data-resize-top");
         }
     }, Constants.TIMEOUT_TRANSITION + 100);   // 等待 setPadding 动画结束

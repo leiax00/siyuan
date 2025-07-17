@@ -1,7 +1,7 @@
 import {hasClosestByAttribute, hasClosestByClassName, hasTopClosestByClassName,} from "../../protyle/util/hasClosest";
 import {closeModel, closePanel} from "./closePanel";
 import {popMenu} from "../menu";
-import {activeBlur, hideKeyboardToolbar} from "./keyboardToolbar";
+import {activeBlur} from "./keyboardToolbar";
 import {isIPhone} from "../../protyle/util/compatibility";
 import {App} from "../../index";
 import {globalTouchEnd, globalTouchStart} from "../../boot/globalEvent/touch";
@@ -21,7 +21,6 @@ const popSide = (render = true) => {
     if (render) {
         document.getElementById("toolbarFile").dispatchEvent(new CustomEvent("click"));
     } else {
-        hideKeyboardToolbar();
         activeBlur();
         document.getElementById("sidebar").style.transform = "translateX(0px)";
     }
@@ -136,6 +135,12 @@ export const handleTouchEnd = (event: TouchEvent, app: App) => {
 };
 
 export const handleTouchStart = (event: TouchEvent) => {
+    if (0 < event.touches.length && ((event.touches[0].target as HTMLElement).tagName === "VIDEO" || (event.touches[0].target as HTMLElement).tagName === "AUDIO")) {
+        // https://github.com/siyuan-note/siyuan/issues/14569
+        activeBlur();
+        return;
+    }
+
     if (globalTouchStart(event)) {
         return;
     }
@@ -175,7 +180,7 @@ export const handleTouchMove = (event: TouchEvent) => {
     }
 
     // 正在编辑时禁止滑动
-    if(!document.querySelector("#keyboardToolbar").classList.contains("fn__none")) {
+    if (!document.querySelector("#keyboardToolbar").classList.contains("fn__none")) {
         return;
     }
     // 只读状态下选中内容时时禁止滑动
@@ -231,7 +236,8 @@ export const handleTouchMove = (event: TouchEvent) => {
             hasClosestByAttribute(target, "data-type", "NodeAttributeView") ||
             hasClosestByAttribute(target, "data-type", "NodeMathBlock") ||
             hasClosestByAttribute(target, "data-type", "NodeTable") ||
-            hasTopClosestByClassName(target, "list");
+            hasTopClosestByClassName(target, "list") ||
+            hasTopClosestByClassName(target, "protyle-breadcrumb__bar--nowrap");
         if (scrollElement) {
             if (scrollElement.classList.contains("table")) {
                 scrollElement = scrollElement.firstElementChild as HTMLElement;
@@ -248,18 +254,29 @@ export const handleTouchMove = (event: TouchEvent) => {
                     scrollElement = scrollElement.parentElement;
                 }
             }
-
-            if (scrollElement && (
-                (xDiff < 0 && scrollElement.scrollLeft > 0) ||
-                (xDiff > 0 && scrollElement.clientWidth + scrollElement.scrollLeft < scrollElement.scrollWidth)
-            )) {
-                scrollBlock = true;
-                return;
+            let noScroll = false;
+            if (scrollElement && scrollElement.scrollLeft === 0) {
+                scrollElement.scrollLeft = 1;
+                if (scrollElement.scrollLeft === 0) {
+                    noScroll = true;
+                } else {
+                    scrollElement.scrollLeft = 0;
+                }
+            }
+            if (!noScroll) {
+                if (scrollElement && (
+                    (xDiff < 0 && scrollElement.scrollLeft > 0) ||
+                    (xDiff > 0 && scrollElement.clientWidth + scrollElement.scrollLeft < scrollElement.scrollWidth)
+                )) {
+                    scrollBlock = true;
+                    return;
+                }
             }
             if (scrollBlock) {
                 return;
             }
         }
+
         if (isFirstMove) {
             sideMaskElement.style.zIndex = (++window.siyuan.zIndex).toString();
             document.getElementById("sidebar").style.zIndex = (++window.siyuan.zIndex).toString();
@@ -298,7 +315,6 @@ export const handleTouchMove = (event: TouchEvent) => {
             transformMask((windowWidth - xDiff) / windowWidth);
         }
         activeBlur();
-        hideKeyboardToolbar();
         if (window.siyuan.mobile.editor) {
             window.siyuan.mobile.editor.protyle.contentElement.style.overflow = "hidden";
         }

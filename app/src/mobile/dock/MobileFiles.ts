@@ -1,8 +1,4 @@
-import {
-    hasClosestByClassName,
-    hasClosestByTag,
-    hasTopClosestByTag
-} from "../../protyle/util/hasClosest";
+import {hasClosestByClassName, hasClosestByTag, hasTopClosestByTag} from "../../protyle/util/hasClosest";
 import {escapeHtml} from "../../util/escape";
 import {Model} from "../../layout/Model";
 import {Constants} from "../../constants";
@@ -101,13 +97,13 @@ export class MobileFiles extends Model {
     <svg data-type="sort" class="toolbar__icon${window.siyuan.config.readonly ? " fn__none" : ""}"><use xlink:href="#iconSort"></use></svg>
 </div>
 <div class="fn__flex-1"></div>
-<ul class="b3-list b3-list--background fn__flex-column" style="min-height: auto;height:42px;transition: height  .2s cubic-bezier(0, 0, .2, 1) 0ms">
+<ul class="b3-list b3-list--background fn__flex-column" style="min-height: auto;height:42px;transition: height .2s cubic-bezier(0, 0, .2, 1) 0ms">
     <li class="b3-list-item" data-type="toggle">
         <span class="b3-list-item__toggle">
             <svg class="b3-list-item__arrow"><use xlink:href="#iconRight"></use></svg>
         </span>
         <span class="b3-list-item__text">${window.siyuan.languages.closeNotebook}</span>
-        <span class="counter fn__none" style="cursor: auto"></span>
+        <span class="counter" style="cursor: auto"></span>
     </li>
     <ul class="fn__none fn__flex-1"></ul>
 </ul>`;
@@ -217,6 +213,13 @@ export class MobileFiles extends Model {
                             } else if (type === "more-root") {
                                 initNavigationMenu(app, target.parentElement);
                                 window.siyuan.menus.menu.fullscreen("bottom");
+                            } else if (type === "addLocal") {
+                                fetchPost("/api/filetree/moveLocalShorthands", {
+                                    "notebook": notebookId
+                                });
+                                this.element.querySelectorAll('[data-type="addLocal"]').forEach(item => {
+                                    item.remove();
+                                });
                             }
                         }
                         if (type === "more-file") {
@@ -352,9 +355,9 @@ export class MobileFiles extends Model {
         const counterElement = this.closeElement.querySelector(".counter");
         counterElement.textContent = closeCounter.toString();
         if (closeCounter) {
-            counterElement.classList.remove("fn__none");
+            this.closeElement.classList.remove("fn__none");
         } else {
-            counterElement.classList.add("fn__none");
+            this.closeElement.classList.add("fn__none");
         }
         window.siyuan.storage[Constants.LOCAL_FILESPATHS].forEach((item: IFilesPath) => {
             item.openPaths.forEach((openPath) => {
@@ -366,7 +369,7 @@ export class MobileFiles extends Model {
         }
         const svgElement = this.closeElement.querySelector("svg");
         if (html !== "") {
-            this.closeElement.style.height = "30px";
+            this.closeElement.style.height = "42px";
             svgElement.classList.remove("b3-list-item__arrow--open");
             this.closeElement.lastElementChild.classList.add("fn__none");
         } else {
@@ -434,7 +437,7 @@ export class MobileFiles extends Model {
                         this.closeElement.lastElementChild.innerHTML = closeHTML;
                         const counterElement = this.closeElement.querySelector(".counter");
                         counterElement.textContent = (parseInt(counterElement.textContent) + 1).toString();
-                        counterElement.classList.remove("fn__none");
+                        this.closeElement.classList.remove("fn__none");
                     }
                 }
             });
@@ -445,7 +448,7 @@ export class MobileFiles extends Model {
                     const counterElement = this.closeElement.querySelector(".counter");
                     counterElement.textContent = (parseInt(counterElement.textContent) - 1).toString();
                     if (counterElement.textContent === "0") {
-                        counterElement.classList.add("fn__none");
+                        this.closeElement.classList.add("fn__none");
                     }
                 }
             }
@@ -499,7 +502,7 @@ export class MobileFiles extends Model {
             const counterElement = this.closeElement.querySelector(".counter");
             counterElement.textContent = (parseInt(counterElement.textContent) - 1).toString();
             if (counterElement.textContent === "0") {
-                counterElement.classList.add("fn__none");
+                this.closeElement.classList.add("fn__none");
             }
         }
         setNoteBook((notebooks: INotebook[]) => {

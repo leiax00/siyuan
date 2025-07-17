@@ -143,16 +143,17 @@ func getUpdatePkg() (downloadPkgURLs []string, checksum string, err error) {
 	b3logURL := "https://release.b3log.org/siyuan/" + pkg
 	liuyunURL := "https://release.liuyun.io/siyuan/" + pkg
 	githubURL := "https://github.com/siyuan-note/siyuan/releases/download/v" + ver + "/" + pkg
-	ghproxyURL := "https://mirror.ghproxy.com/" + githubURL
+	ghproxyURL := "https://ghfast.top/" + githubURL
 	if util.IsChinaCloud() {
 		downloadPkgURLs = append(downloadPkgURLs, b3logURL)
 		downloadPkgURLs = append(downloadPkgURLs, liuyunURL)
 		downloadPkgURLs = append(downloadPkgURLs, ghproxyURL)
 		downloadPkgURLs = append(downloadPkgURLs, githubURL)
 	} else {
-		downloadPkgURLs = append(downloadPkgURLs, githubURL)
 		downloadPkgURLs = append(downloadPkgURLs, b3logURL)
 		downloadPkgURLs = append(downloadPkgURLs, liuyunURL)
+		downloadPkgURLs = append(downloadPkgURLs, githubURL)
+		downloadPkgURLs = append(downloadPkgURLs, ghproxyURL)
 	}
 
 	checksums := result["checksums"].(map[string]interface{})
@@ -232,7 +233,7 @@ type Announcement struct {
 	Region int    `json:"region"`
 }
 
-func GetAnnouncements() (ret []*Announcement) {
+func getAnnouncements() (ret []*Announcement) {
 	result, err := util.GetRhyResult(false)
 	if err != nil {
 		logging.LogErrorf("get announcement failed: %s", err)

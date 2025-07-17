@@ -275,11 +275,19 @@ ${unicode2Emoji(emoji.unicode)}</button>`;
             const cellElement = hasClosestByClassName(protyle.toolbar.range.startContainer, "av__cell");
             if (cellElement) {
                 const cellRect = cellElement.getBoundingClientRect();
+                /// #if !MOBILE
                 setPosition(this.element, cellRect.left, cellRect.bottom, cellRect.height);
+                /// #else
+                setPosition(this.element, 0, 0);
+                /// #endif
             }
         } else {
             const textareaPosition = getSelectionPosition(protyle.wysiwyg.element);
+            /// #if !MOBILE
             setPosition(this.element, textareaPosition.left, textareaPosition.top + 26, 30);
+            /// #else
+            setPosition(this.element, 0, 0);
+            /// #endif
         }
         this.element.scrollTop = 0;
         this.bindUploadEvent(protyle, this.element);
@@ -427,7 +435,7 @@ ${genHintItemHTML(item)}
             if (!cellElement) {
                 return;
             }
-            const rowElement = hasClosestByClassName(cellElement, "av__row");
+            const rowElement = hasClosestByClassName(cellElement, nodeElement.getAttribute("data-av-type") === "table" ? "av__row" : "av__gallery-item");
             if (!rowElement) {
                 return;
             }
@@ -555,6 +563,7 @@ ${genHintItemHTML(item)}
                         type: "id",
                         color: `${response.data}${Constants.ZWSP}${refIsS ? "s" : "d"}${Constants.ZWSP}${(refIsS ? fileNames[0] : realFileName).substring(0, window.siyuan.config.editor.blockRefDynamicAnchorTextMaxLen)}`
                     });
+                    protyle.toolbar.range.collapse(false);
                 });
             });
             return;
@@ -588,6 +597,7 @@ ${genHintItemHTML(item)}
                 type: "id",
                 color: `${tempElement.getAttribute("data-id")}${Constants.ZWSP}${tempElement.getAttribute("data-subtype")}${Constants.ZWSP}${tempElement.textContent}`
             });
+            protyle.toolbar.range.collapse(false);
             return;
         } else if (this.splitChar === ":") {
             addEmoji(value);
@@ -984,6 +994,8 @@ ${genHintItemHTML(item)}
     }
 
     private getKey(currentLineValue: string, extend: IHintExtend[]) {
+        const prevSplit = this.splitChar;
+        const prevLastIndex = this.lastIndex;
         this.lastIndex = -1;
         this.splitChar = "";
         extend.forEach((item) => {
@@ -996,20 +1008,17 @@ ${genHintItemHTML(item)}
                 }
             }
             if (this.lastIndex < currentLastIndex) {
-                if (Constants.BLOCK_HINT_KEYS.includes(this.splitChar) &&
-                    (item.key === ":" || item.key === "#" || item.key === "/" || item.key === "、")) {
-                    // 块搜索中忽略以上符号
-                } else if (this.splitChar === "#" &&
-                    (item.key === "/" || item.key === "、")) {
-                    // 标签中忽略以上符号
-                } else {
-                    this.splitChar = item.key;
-                    this.lastIndex = currentLastIndex;
-                }
+                this.splitChar = item.key;
+                this.lastIndex = currentLastIndex;
             }
         });
         if (this.lastIndex === -1) {
             return undefined;
+        }
+        // 上一次提示没有结束时不能被其余提示干扰 https://github.com/siyuan-note/siyuan/issues/14324
+        if (!this.element.classList.contains("fn__none") && prevSplit && prevSplit !== this.splitChar) {
+            this.splitChar = prevSplit;
+            this.lastIndex = prevLastIndex;
         }
         // 冒号前为数字或冒号不进行emoji提示
         if (this.splitChar === ":") {

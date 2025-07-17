@@ -7,20 +7,17 @@
 
 ## NPM 依赖
 
-安装 pnpm：`npm install -g pnpm@9.12.1`
+安装 pnpm：`npm install -g pnpm@10.12.4`
 
 <details>
 <summary>适用于中国大陆</summary>
 
 设置 Electron 镜像环境变量并安装 Electron：
 
-* macOS/Linux: 
- ```
- ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v33.4.2 -D
- ```
-* Windows:
-    * `SET ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
-    * `pnpm install electron@v33.4.2 -D`
+* macOS/Linux：`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ pnpm install electron@v37.2.0 -D`
+* Windows：
+  * `SET ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`
+  * `pnpm install electron@v37.2.0 -D`
 
 NPM 镜像：
 
@@ -28,9 +25,9 @@ NPM 镜像：
 * 恢复使用官方仓库 `pnpm --registry https://registry.npmjs.org i`
 </details>
 
-桌面端进入 app 文件夹运行：
+进入 app 文件夹执行：
 
-* `pnpm install electron@v33.4.2 -D`
+* `pnpm install electron@v37.2.0 -D`
 * `pnpm run dev`
 * `pnpm run start`
 
@@ -44,9 +41,11 @@ NPM 镜像：
 ### 桌面端
 
 * `cd kernel`
-* `go build --tags "fts5" -o "../app/kernel/SiYuan-Kernel.exe"`
+* Windows: `go build --tags "fts5" -o "../app/kernel/SiYuan-Kernel.exe"`
+* Linux/macOS: `go build --tags "fts5" -o "../app/kernel/SiYuan-Kernel"`
 * `cd ../app/kernel`
-* `./SiYuan-Kernel.exe --wd=.. --mode=dev`
+* Windows: `./SiYuan-Kernel.exe --wd=.. --mode=dev`
+* Linux/macOS: `./SiYuan-Kernel --wd=.. --mode=dev`
 
 ### iOS
 
@@ -57,7 +56,8 @@ NPM 镜像：
 ### Android
 
 * `cd kernel`
-* `gomobile bind --tags fts5 -ldflags '-s -w' -v -o kernel.aar -target='android/arm64' -androidapi 24 ./mobile/`
+* `set JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF-8`
+* `gomobile bind --tags fts5 -ldflags "-s -w"  -v -o kernel.aar -target=android/arm64 -androidapi 26 ./mobile/`
 * https://github.com/siyuan-note/siyuan-android
 
 ### Harmony

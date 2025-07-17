@@ -1,4 +1,4 @@
-import {hasClosestBlock, hasClosestByAttribute} from "../protyle/util/hasClosest";
+import {hasClosestBlock, isInEmbedBlock} from "../protyle/util/hasClosest";
 import {focusByRange, getEditorRange} from "../protyle/util/selection";
 
 export const bgFade = (element: Element) => {
@@ -22,7 +22,7 @@ export const highlightById = (protyle: IProtyle, id: string, top = false) => {
     }
 
     Array.from(protyleElement.querySelectorAll(`[data-node-id="${id}"]`)).find((item: HTMLElement) => {
-        if (!hasClosestByAttribute(item, "data-type", "block-render", true)) {
+        if (!isInEmbedBlock(item)) {
             nodeElement = item;
             return true;
         }
@@ -52,8 +52,10 @@ export const scrollCenter = (protyle: IProtyle, nodeElement?: Element, top = fal
                 return;
             }
             // undo 时禁止数据库滚动
-            if (blockElement.classList.contains("av") && blockElement.dataset.render === "true" &&
-                (blockElement.querySelector(".av__row--header").getAttribute("style")?.indexOf("transform") > -1 || blockElement.querySelector(".av__row--footer").getAttribute("style")?.indexOf("transform") > -1)) {
+            if (blockElement.classList.contains("av") && blockElement.dataset.render === "true" && (
+                blockElement.querySelector(".av__row--header")?.getAttribute("style")?.indexOf("transform") > -1 ||
+                blockElement.querySelector(".av__row--footer")?.getAttribute("style")?.indexOf("transform") > -1
+            )) {
                 return;
             }
             // 撤销时 br 插入删除会导致 rang 被修改 https://github.com/siyuan-note/siyuan/issues/12679

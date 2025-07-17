@@ -30,6 +30,21 @@ export const openByMobile = (uri: string) => {
     }
 };
 
+export const exportByMobile = (uri: string) => {
+    if (!uri) {
+        return;
+    }
+    if (isInIOS()) {
+        openByMobile(uri);
+    } else if (isInAndroid()) {
+        window.JSAndroid.exportByDefault(uri);
+    } else if (isInHarmony()) {
+        window.JSHarmony.exportByDefault(uri);
+    } else {
+        window.open(uri);
+    }
+};
+
 export const readText = () => {
     if (isInAndroid()) {
         return window.JSAndroid.readClipboard();
@@ -165,6 +180,11 @@ export const isIPhone = () => {
     return navigator.userAgent.indexOf("iPhone") > -1;
 };
 
+export const isSafari = () => {
+    const userAgent = navigator.userAgent;
+    return userAgent.includes("Safari") && !userAgent.includes("Chrome") && !userAgent.includes("Chromium");
+};
+
 export const isIPad = () => {
     return navigator.userAgent.indexOf("iPad") > -1;
 };
@@ -200,6 +220,13 @@ export const isInIOS = () => {
 
 export const isInHarmony = () => {
     return window.siyuan.config.system.container === "harmony" && window.JSHarmony;
+};
+
+export const updateHotkeyAfterTip = (hotkey: string) => {
+    if (hotkey) {
+        return " " + updateHotkeyTip(hotkey);
+    }
+    return "";
 };
 
 // Mac，Windows 快捷键展示

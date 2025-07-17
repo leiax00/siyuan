@@ -216,7 +216,8 @@ func InitConf() {
 	if 32 < Conf.FileTree.MaxOpenTabCount {
 		Conf.FileTree.MaxOpenTabCount = 32
 	}
-	Conf.FileTree.DocCreateSavePath = strings.TrimSpace(Conf.FileTree.DocCreateSavePath)
+	Conf.FileTree.DocCreateSavePath = util.TrimSpaceInPath(Conf.FileTree.DocCreateSavePath)
+	Conf.FileTree.RefCreateSavePath = util.TrimSpaceInPath(Conf.FileTree.RefCreateSavePath)
 	util.UseSingleLineSave = Conf.FileTree.UseSingleLineSave
 
 	util.CurrentCloudRegion = Conf.CloudRegion
@@ -230,6 +231,13 @@ func InitConf() {
 	}
 	if 1 > len(Conf.Editor.Emoji) {
 		Conf.Editor.Emoji = []string{}
+	}
+	for i, emoji := range Conf.Editor.Emoji {
+		if strings.Contains(emoji, ".") {
+			// XSS through emoji name https://github.com/siyuan-note/siyuan/issues/15034
+			emoji = util.FilterUploadEmojiFileName(emoji)
+			Conf.Editor.Emoji[i] = emoji
+		}
 	}
 	if 9 > Conf.Editor.FontSize || 72 < Conf.Editor.FontSize {
 		Conf.Editor.FontSize = 16
@@ -517,10 +525,6 @@ func InitConf() {
 	Conf.Save()
 	logging.SetLogLevel(Conf.LogLevel)
 
-	if Conf.System.DisableGoogleAnalytics {
-		logging.LogInfof("user has disabled [Google Analytics]")
-	}
-
 	util.SetNetworkProxy(Conf.System.NetworkProxy.String())
 
 	go util.InitPandoc()
@@ -687,6 +691,7 @@ func Close(force, setCurrentWorkspace bool, execInstallPkg int) (exitCode int) {
 		time.Sleep(500 * time.Millisecond)
 		logging.LogInfof("exited kernel")
 		util.WebSocketServer.Close()
+		util.HttpServing = false
 		os.Exit(logging.ExitCodeOk)
 	}()
 	return
@@ -846,8 +851,7 @@ func (conf *AppConf) GetClosedBoxes() (ret []*Box) {
 
 func (conf *AppConf) Language(num int) (ret string) {
 	ret = conf.language(num)
-	subscribeURL := util.GetCloudAccountServer() + "/subscribe/siyuan"
-	ret = strings.ReplaceAll(ret, "${url}", subscribeURL)
+	ret = strings.ReplaceAll(ret, "${accountServer}", util.GetCloudAccountServer())
 	return
 }
 
@@ -1001,6 +1005,7 @@ func clearWorkspaceTemp() {
 	os.RemoveAll(filepath.Join(util.TempDir, "import"))
 	os.RemoveAll(filepath.Join(util.TempDir, "repo"))
 	os.RemoveAll(filepath.Join(util.TempDir, "os"))
+	os.RemoveAll(filepath.Join(util.TempDir, "base64"))
 	os.RemoveAll(filepath.Join(util.TempDir, "blocktree.msgpack")) // v2.7.2 前旧版的块树数据
 	os.RemoveAll(filepath.Join(util.TempDir, "blocktree"))         // v3.1.0 前旧版的块树数据
 

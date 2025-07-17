@@ -15,9 +15,12 @@ import {matchHotKey} from "../protyle/util/hotKey";
 import {Menu} from "../plugin/Menu";
 import {hasClosestByClassName} from "../protyle/util/hasClosest";
 
-export const showFileInFolder = (filePath: string) => {
+export const useShell = (cmd: "showItemInFolder" | "openPath", filePath: string) => {
     /// #if !BROWSER
-    ipcRenderer.send(Constants.SIYUAN_OPEN_FOLDER, filePath);
+    ipcRenderer.send(Constants.SIYUAN_CMD, {
+        cmd,
+        filePath: filePath
+    });
     /// #endif
 };
 
@@ -339,17 +342,16 @@ export const movePathTo = (cb: (toPath: string[], toNotebook: string[]) => void,
         inputEvent(event);
     });
     inputElement.addEventListener("blur", () => {
-        if (!inputElement.value) {
-            return;
-        }
-        let list: string[] = window.siyuan.storage[Constants.LOCAL_MOVE_PATH].keys;
-        list.splice(0, 0, inputElement.value);
-        list = Array.from(new Set(list));
-        if (list.length > window.siyuan.config.search.limit) {
-            list.splice(window.siyuan.config.search.limit, list.length - window.siyuan.config.search.limit);
+        if (inputElement.value) {
+            let list: string[] = window.siyuan.storage[Constants.LOCAL_MOVE_PATH].keys;
+            list.splice(0, 0, inputElement.value);
+            list = Array.from(new Set(list));
+            if (list.length > window.siyuan.config.search.limit) {
+                list.splice(window.siyuan.config.search.limit, list.length - window.siyuan.config.search.limit);
+            }
+            window.siyuan.storage[Constants.LOCAL_MOVE_PATH].keys = list;
         }
         window.siyuan.storage[Constants.LOCAL_MOVE_PATH].k = inputElement.value;
-        window.siyuan.storage[Constants.LOCAL_MOVE_PATH].keys = list;
         setStorageVal(Constants.LOCAL_MOVE_PATH, window.siyuan.storage[Constants.LOCAL_MOVE_PATH]);
     });
     const lineHeight = 28;

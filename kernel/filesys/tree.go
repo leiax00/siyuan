@@ -41,6 +41,10 @@ import (
 
 func LoadTrees(ids []string) (ret map[string]*parse.Tree) {
 	ret = map[string]*parse.Tree{}
+	if 1 > len(ids) {
+		return ret
+	}
+
 	bts := treenode.GetBlockTrees(ids)
 	luteEngine := util.NewLute()
 	var boxIDs []string
@@ -238,6 +242,7 @@ func prepareWriteTree(tree *parse.Tree) (data []byte, filePath string, err error
 	tree.Root.SetIALAttr("type", "doc")
 	renderer := render.NewJSONRenderer(tree, luteEngine.RenderOptions)
 	data = renderer.Render()
+	data = bytes.ReplaceAll(data, []byte("\\u0000"), []byte(""))
 
 	if !util.UseSingleLineSave {
 		buf := bytes.Buffer{}
@@ -278,6 +283,15 @@ func parseJSON2Tree(boxID, p string, jsonData []byte, luteEngine *lute.Lute) (re
 		needFix = true
 		logging.LogInfof("migrated tree [%s] from spec [%s] to [%s]", filePath, oldSpec, ret.Root.Spec)
 	}
+
+	if pathID := util.GetTreeID(p); pathID != ret.Root.ID {
+		needFix = true
+		logging.LogInfof("reset tree id from [%s] to [%s]", ret.Root.ID, pathID)
+		ret.Root.ID = pathID
+		ret.ID = pathID
+		ret.Root.SetIALAttr("id", ret.ID)
+	}
+
 	if needFix {
 		renderer := render.NewJSONRenderer(ret, luteEngine.RenderOptions)
 		data := renderer.Render()

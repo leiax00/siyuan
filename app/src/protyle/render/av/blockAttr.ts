@@ -10,7 +10,7 @@ import {openMenuPanel} from "./openMenuPanel";
 import {uploadFiles} from "../../upload";
 import {openLink} from "../../../editor/openLink";
 import {dragUpload, editAssetItem} from "./asset";
-import {previewImage} from "../../preview/image";
+import {previewImages} from "../../preview/image";
 /// #if !BROWSER
 import {webUtils} from "electron";
 /// #endif
@@ -64,7 +64,7 @@ export const genAVValueHTML = (value: IAVCellValue) => {
             html = `<input value="${escapeAttr(value.block.content)}" type="text" class="b3-text-field b3-text-field--text fn__flex-1" placeholder="${window.siyuan.languages.empty}">`;
             break;
         case "text":
-            html = `<textarea style="resize: vertical" rows="${value.text.content.split("\n").length}" class="b3-text-field b3-text-field--text fn__flex-1" placeholder="${window.siyuan.languages.empty}">${value.text.content}</textarea>`;
+            html = `<textarea style="resize: vertical" rows="${(value.text?.content || "").split("\n").length}" class="b3-text-field b3-text-field--text fn__flex-1" placeholder="${window.siyuan.languages.empty}">${value.text?.content || ""}</textarea>`;
             break;
         case "number":
             html = `<input value="${value.number.isNotEmpty ? value.number.content : ""}" type="number" class="b3-text-field b3-text-field--text fn__flex-1" placeholder="${window.siyuan.languages.empty}">
@@ -206,7 +206,7 @@ class="fn__flex-1 fn__flex${["url", "text", "number", "email", "phone", "block"]
             innerHTML += `<div class="fn__hr"></div>
 <button data-type="addColumn" class="b3-button b3-button--cancel"><svg><use xlink:href="#iconAdd"></use></svg>${window.siyuan.languages.newCol}</button>
 <div class="fn__hr--b"></div><div class="fn__hr--b"></div>`;
-            html += `<div data-av-id="${table.avID}" data-node-id="${id}" data-type="NodeAttributeView">${innerHTML}</div>`;
+            html += `<div data-av-id="${table.avID}" data-av-type="table" data-node-id="${id}" data-type="NodeAttributeView">${innerHTML}</div>`;
 
             if (element.innerHTML) {
                 // 防止 blockElement 找不到
@@ -218,7 +218,7 @@ class="fn__flex-1 fn__flex${["url", "text", "number", "email", "phone", "block"]
             element.addEventListener("dragstart", (event: DragEvent) => {
                 const target = event.target as HTMLElement;
                 window.siyuan.dragElement = target.parentElement;
-                window.siyuan.dragElement.style.opacity = ".1";
+                window.siyuan.dragElement.style.opacity = ".38";
                 dragBlockElement = hasClosestBlock(window.siyuan.dragElement) as HTMLElement;
 
                 const ghostElement = document.createElement("div");
@@ -477,7 +477,7 @@ const openEdit = (protyle: IProtyle, element: HTMLElement, event: MouseEvent) =>
                 });
             } else {
                 if (target.tagName === "IMG") {
-                    previewImage(target.getAttribute("src"));
+                    previewImages([target.getAttribute("src")]);
                 } else {
                     openLink(protyle, target.dataset.url, event, event.ctrlKey || event.metaKey);
                 }

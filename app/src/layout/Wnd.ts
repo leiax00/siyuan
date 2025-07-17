@@ -191,7 +191,7 @@ export class Wnd {
             let oldTabHeaderElement = window.siyuan.dragElement;
             let exitDrag = false;
             Array.from(it.firstElementChild.childNodes).find((item: HTMLElement) => {
-                if (item.style?.opacity === "0.1") {
+                if (item.style?.opacity === "0.38") {
                     oldTabHeaderElement = item;
                     exitDrag = true;
                     return true;
@@ -207,7 +207,7 @@ export class Wnd {
                 return;
             } else if (!exitDrag && !oldTabHeaderElement) { // 拖拽到新窗口
                 oldTabHeaderElement = document.createElement("li");
-                oldTabHeaderElement.style.opacity = "0.1";
+                oldTabHeaderElement.style.opacity = "0.38";
                 oldTabHeaderElement.innerHTML = '<svg class="svg"><use xlink:href="#iconFile"></use></svg>';
                 oldTabHeaderElement.setAttribute("data-clone", "true");
                 it.firstElementChild.append(oldTabHeaderElement);
@@ -231,17 +231,6 @@ export class Wnd {
                 }
             }
         });
-
-        this.headersElement.parentElement.addEventListener("dragend", () => {
-            document.querySelectorAll(".layout-tab-bars--drag").forEach(item => {
-                item.classList.remove("layout-tab-bars--drag");
-            });
-            // 窗口拖拽到新窗口时，不 drop 无法移除 clone 的元素
-            document.querySelectorAll(".layout-tab-bar li[data-clone='true']").forEach(item => {
-                item.remove();
-            });
-        });
-
         this.headersElement.parentElement.addEventListener("drop", function (event: DragEvent & {
             target: HTMLElement
         }) {
@@ -284,7 +273,7 @@ export class Wnd {
             }
 
             const nextTabHeaderElement = (Array.from(it.firstElementChild.childNodes).find((item: HTMLElement) => {
-                if (item.style?.opacity === "0.1") {
+                if (item.style?.opacity === "0.38") {
                     return true;
                 }
             }) as HTMLElement)?.nextElementSibling;
@@ -371,7 +360,12 @@ export class Wnd {
             /// #if !BROWSER
             if (!oldTab) { // 从主窗口拖拽到页签新窗口
                 JSONToCenter(app, tabData, this);
-                oldTab = this.children[this.children.length - 1];
+                this.children.find(item => {
+                    if (item.headElement.getAttribute("data-activeTime") === tabData.activeTime) {
+                        oldTab = item;
+                        return true;
+                    }
+                });
                 ipcRenderer.send(Constants.SIYUAN_SEND_WINDOWS, {cmd: "closetab", data: tabData.id});
                 ipcRenderer.send(Constants.SIYUAN_CMD, "focus");
             }
@@ -418,6 +412,7 @@ export class Wnd {
                 return;
             }
             if (targetWnd) {
+                recordBeforeResizeTop();
                 targetWnd.headersElement.append(oldTab.headElement);
                 targetWnd.headersElement.parentElement.classList.remove("fn__none");
                 targetWnd.moveTab(oldTab);
@@ -568,7 +563,7 @@ export class Wnd {
                     resize,
                 });
             }
-            if (window.siyuan.editorIsFullscreen) {
+            if (window.siyuan.editorIsFullscreen && !currentTab.model.editor.protyle.element.className.includes("fullscreen")) {
                 fullscreen(currentTab.model.editor.protyle.element);
                 setPadding(currentTab.model.editor.protyle);
             }
@@ -722,6 +717,9 @@ export class Wnd {
         let openTime: string;
         let removeCount = 0;
         this.children.forEach((item, index) => {
+            if (!item.headElement) {
+                return;
+            }
             if (item.headElement.classList.contains("item--pin") || item.headElement.classList.contains("item--focus")) {
                 return;
             }
@@ -976,6 +974,7 @@ export class Wnd {
             // 场景：没有打开的文档，点击标签面板打开
             return this;
         }
+        recordBeforeResizeTop();
         const wnd = new Wnd(this.app, direction);
         if (direction === this.parent.direction) {
             this.parent.addWnd(wnd, this.id);
